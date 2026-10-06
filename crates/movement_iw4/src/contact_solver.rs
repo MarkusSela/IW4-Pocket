@@ -22,6 +22,10 @@ pub(crate) struct Settings {
     pub(crate) landing_normal_z: f32,
 }
 const BUDGET: usize = 12;
+/// How far a retried move lifts off the planes it presses into. A move
+/// projected flush onto a plane rounds slightly into it at map-scale
+/// coordinates, and the trace stops that at once (IW4 overclips instead).
+const SKIN: f64 = 1. / 32.;
 fn finite(v: Vector) -> bool {
     v.iter().all(|x| x.is_finite())
 }
@@ -222,6 +226,7 @@ pub(crate) fn slide(
     let mut elapsed = 0f64;
     let total = s.dt as f64;
     let mut obstructed = false;
+    let mut lifted = false;
     for _ in 0..BUDGET {
         let remaining = total - elapsed;
         if remaining <= 0. {
@@ -234,9 +239,16 @@ pub(crate) fn slide(
                 (initial[2] as f64 - g as f64 * t) as f32,
             ]
         };
-        let average = project(desired(elapsed + remaining * 0.5), &ns[..count]);
-        let target =
-            core::array::from_fn(|i| (m.origin[i] as f64 + average[i] as f64 * remaining) as f32);
+        let wanted = desired(elapsed + remaining * 0.5);
+        let average = project(wanted, &ns[..count]);
+        let mut target: [f64; 3] =
+            core::array::from_fn(|i| m.origin[i] as f64 + average[i] as f64 * remaining);
+        if lifted {
+            for n in ns[..count].iter().filter(|n| dot(wanted, **n) < 0.) {
+                (0..3).for_each(|i| target[i] += n[i] as f64 * SKIN);
+            }
+        }
+        let target = target.map(|x| x as f32);
         let Some((hit, p)) = sweep(m.origin, target, trace) else {
             m.velocity = [0.; 3];
             return (m, true);
@@ -260,6 +272,10 @@ pub(crate) fn slide(
         }
         m.velocity = project(desired(elapsed), &ns[..count]);
         if hit.fraction == 0. && duplicate {
+            if !lifted {
+                lifted = true;
+                continue;
+            }
             return (m, true);
         }
     }
