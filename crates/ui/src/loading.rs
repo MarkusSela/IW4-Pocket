@@ -31,6 +31,9 @@ fn spawn_overlay_ui_camera(commands: &mut Commands) {
             clear_color: ClearColorConfig::Custom(Color::NONE),
             ..default()
         },
+        // Flat UI: the default 4x MSAA is a full-resolution multisampled
+        // target and resolve every frame for nothing visible.
+        bevy::render::view::Msaa::Off,
         crate::UiCamera,
         OverlayUiCamera,
     ));
@@ -165,6 +168,7 @@ pub(crate) fn spawn_loading_screen(
             clear_color: ClearColorConfig::Custom(LOADING_CLEAR),
             ..default()
         },
+        bevy::render::view::Msaa::Off,
         crate::UiCamera,
         LoadingCamera,
     ));

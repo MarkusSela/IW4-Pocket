@@ -175,6 +175,8 @@ pub fn valid_file_setting(name: &str, value: &str) -> bool {
         "IW4L_IMAGE_DECODE_BUDGET_MIB" | "IW4L_CACHE_BUDGET_MIB" =>
             value.parse::<u64>().is_ok_and(|n| n <= 4096),
         "IW4L_SOUND" => matches!(value, "off" | "0" | "on" | "1"),
+        // Metal keeps at most three drawables, so latency above 2 does nothing.
+        "IW4L_FRAME_LATENCY" => matches!(value, "1" | "2"),
         _ => false,
     }
 }

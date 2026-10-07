@@ -205,7 +205,10 @@ const FRAME_LATENCY_ENV: &str = "IW4L_FRAME_LATENCY";
 /// default, and says so rather than silently picking an arm. Read once, so the
 /// window and the manifest cannot disagree and the complaint is made once.
 pub(crate) fn frame_latency() -> u32 {
-    const DEFAULT: u32 = 1;
+    // iOS renders on the main thread (no pipelined rendering), so with one
+    // frame in flight (two drawables) it waits on nextDrawable every frame and
+    // snaps to 30/20/15 fps. Two frames in flight let CPU and GPU overlap.
+    const DEFAULT: u32 = if cfg!(target_os = "ios") { 2 } else { 1 };
     static FRAMES: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
     *FRAMES.get_or_init(|| {
         let Some(asked) = std::env::var_os(FRAME_LATENCY_ENV) else {
