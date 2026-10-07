@@ -966,7 +966,26 @@ fn push_stretch(
     if w.abs() <= f32::EPSILON || h.abs() <= f32::EPSILON {
         return;
     }
-    let applied = surface.apply_rect(x, y, w, h, rect.horz_align as i32, rect.vert_align as i32);
+    let mut applied =
+        surface.apply_rect(x, y, w, h, rect.horz_align as i32, rect.vert_align as i32);
+    if item.cover {
+        // Scale from the un-animated size, so the open/close zoom still shows.
+        let rest = surface.apply_rect(
+            rect.x,
+            rect.y,
+            rect.w.abs(),
+            rect.h.abs(),
+            rect.horz_align as i32,
+            rect.vert_align as i32,
+        );
+        if rest.w > f32::EPSILON && rest.w < surface.width() {
+            let grow = surface.width() / rest.w;
+            let centre = applied.x + applied.w * 0.5;
+            applied.w *= grow;
+            applied.h *= grow;
+            applied.x = centre - applied.w * 0.5;
+        }
+    }
     let color = style.fill_color(item);
     let (material_namespace, material) = match asset_core::AssetKey::parse(&material) {
         Ok(key) if key.kind == asset_core::AssetKind::Material => (key.namespace, key.name),

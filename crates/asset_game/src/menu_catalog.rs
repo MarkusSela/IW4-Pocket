@@ -162,6 +162,11 @@ pub struct MenuItem {
     pub action: Vec<String>,
     pub mouse_enter: Vec<String>,
     pub on_focus: Vec<String>,
+    /// Background art narrower than the screen (e.g. 16:9 art on a 2.17:1
+    /// phone) is scaled up uniformly about its centre, top edge kept, until it
+    /// fills the width, instead of leaving bands at the sides. Opt-in: the
+    /// original menus have no such flag.
+    pub cover: bool,
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
