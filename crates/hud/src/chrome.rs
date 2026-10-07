@@ -361,6 +361,32 @@ fn has_text(item: &MenuItem) -> bool {
     !item.text_key.is_empty() || !item.text_exp.is_empty()
 }
 
+/// Item type of a text box that scrolls instead of growing.
+const ITEM_TYPE_TEXT_SCROLL: i32 = 21;
+/// How long each page of a scrolling text box stays up.
+const TEXT_SCROLL_PAGE_MS: i32 = 2500;
+
+/// The wrapped lines a text item shows this frame, as (first, count): every
+/// line for ordinary items, one box-high page at a time for text-scroll items.
+fn scroll_window(
+    item_type: i32,
+    lines: usize,
+    box_h: f32,
+    line_h: f32,
+    now_ms: i32,
+) -> (usize, usize) {
+    if item_type != ITEM_TYPE_TEXT_SCROLL || line_h <= 0.0 {
+        return (0, lines);
+    }
+    let fit = ((box_h / line_h).floor() as usize).max(1);
+    if lines <= fit {
+        return (0, lines);
+    }
+    let pages = lines.div_ceil(fit);
+    let page = (now_ms.max(0) / TEXT_SCROLL_PAGE_MS) as usize % pages;
+    (page * fit, fit)
+}
+
 fn paint_text(
     menu: &MenuDef,
     index: usize,
@@ -421,7 +447,18 @@ fn paint_text(
         (item.static_flags & 0x0080_0000 != 0).then_some(wrap_width),
         |text| ui_text_width(font, text, item.text_scale),
     );
-    for (line, text) in lines.into_iter().enumerate() {
+    // A text-scroll item (type 21, e.g. the class loadout perk descriptions)
+    // owns a fixed box: show as many wrapped lines as fit and step through the
+    // rest, instead of letting them spill over the items below.
+    let (first, shown) = scroll_window(
+        item.item_type,
+        lines.len(),
+        style.rect.h.abs(),
+        ui_text_height(item.text_scale),
+        host.milliseconds(),
+    );
+    for (line, text) in lines.into_iter().enumerate().skip(first).take(shown) {
+        let line = line - first;
         let measured_w = ui_text_width(font, &text, item.text_scale);
         let measured_h = ui_text_height(item.text_scale);
         let rect = &style.rect;
