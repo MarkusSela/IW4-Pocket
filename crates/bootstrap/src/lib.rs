@@ -5,6 +5,7 @@ mod frame_owner;
 mod ios_input;
 mod launch;
 mod plugins;
+mod promotion;
 
 pub use args::{AcceptanceLaunch, LaunchMode, parse_cli};
 pub use launch::launch;
