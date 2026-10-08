@@ -360,6 +360,11 @@ fn xmodel_merge_stamp(
     for draw in items.draws() {
         scene_ent_admitted(scene, draw.scene_entnum).hash(&mut occupancy);
     }
+    // Effect pieces and dynents join the merge as a whole source whenever they have
+    // draws. The concat patch can neither add nor drop a source, so one starting or
+    // stopping to draw is a change of topology.
+    (!fx_models.draws().is_empty()).hash(&mut occupancy);
+    (!dynents.draws().is_empty()).hash(&mut occupancy);
     let sky_eye = sky.map(|(_, eye)| [eye.x.to_bits(), eye.y.to_bits(), eye.z.to_bits()]);
     let keys = producer_keys(
         fpv,
@@ -620,7 +625,7 @@ pub fn merge_xmodel_draw_plan(
             .copied()
             .filter(|d| scene_ent_admitted(scene, d.scene_entnum)),
     );
-    append_admitted_source(
+    append_whole_source(
         merged,
         &mut packed,
         &mut packed_ok,
@@ -1211,6 +1216,35 @@ fn append_packed_source(
             packed.clear();
         }
     }
+}
+
+/// Effect-model geometry holds every prepared model at every LOD and never changes
+/// once built, so it goes in whole. Compacting it to the few surfaces drawn this
+/// frame would drop the concat layout and re-upload every vertex while any piece is
+/// live.
+fn append_whole_source(
+    merged: &mut XModelDrawPlan,
+    packed: &mut Vec<[u8; asset_iw4::size::GFX_PACKED_VERTEX]>,
+    packed_ok: &mut bool,
+    decoded_n: usize,
+    indices: &[u32],
+    surface_ranges: &[(u32, u32)],
+    materials: &[SmodelPassMaterial],
+    packed_payload: &asset_world::PackedVertexPayload,
+    draws: Vec<XModelSurfaceDraw>,
+) {
+    if draws.is_empty() {
+        return;
+    }
+    append_source_plan(
+        merged,
+        decoded_n,
+        indices,
+        surface_ranges,
+        materials,
+        draws.into_iter(),
+    );
+    append_packed_source(packed, packed_ok, packed_payload, decoded_n);
 }
 
 fn append_admitted_source(
