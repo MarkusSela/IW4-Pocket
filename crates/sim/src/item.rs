@@ -31,6 +31,11 @@ pub const ITEM_MAXS: [f32; 3] = [1.0, 1.0, 1.0];
 
 pub const PLAYER_DROP_Z: f32 = (PLAYER_MAXS[2] - PLAYER_MINS[2]) * 0.5;
 
+/// The riot shield's world model stands upright, as it is carried, with its
+/// origin at the grip; dropped at the dropper's yaw it stood on edge, half in
+/// the floor. A dropped shield is tipped onto its back instead.
+const SHIELD_DROP_PITCH: f32 = -90.0;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DroppedItem {
     pub state: entity_iw4::EntityState,
@@ -354,6 +359,16 @@ fn blocked_fall(
     })
 }
 
+/// A dropped weapon keeps the dropper's yaw; see `SHIELD_DROP_PITCH`.
+fn dropped_angles(script_name: &str, yaw: f32) -> [f32; 3] {
+    let pitch = if script_name.contains("riotshield") {
+        SHIELD_DROP_PITCH
+    } else {
+        0.0
+    };
+    [pitch, yaw, 0.0]
+}
+
 fn launch_dropped_from_ps(
     world: &mut FrameWorld,
     tick: Tick,
@@ -383,7 +398,7 @@ fn launch_dropped_from_ps(
         tr_time: 0,
         tr_duration: 0,
         tr_delta: [0.0; 3],
-        tr_base: [0.0, ps.viewangles[1], 0.0],
+        tr_base: dropped_angles(world.weapon_script_name(weapon), ps.viewangles[1]),
     };
     push_dropped_item(
         world, weapon, origin, pos, apos, owner, clip_r, clip_l, stock, true, scavenger,
@@ -788,7 +803,7 @@ fn drop_current_primary_at(
         tr_time: 0,
         tr_duration: 0,
         tr_delta: [0.0; 3],
-        tr_base: angles,
+        tr_base: dropped_angles(world.weapon_script_name(weapon), angles[1]),
     };
     let entnum = push_dropped_item(
         world,
@@ -1077,6 +1092,15 @@ pub(crate) fn phase_use_items(
 #[cfg(test)]
 mod dropped_item_tests {
     use super::*;
+
+    #[test]
+    fn a_dropped_shield_lies_on_its_back_and_guns_stay_level() {
+        assert_eq!(
+            dropped_angles("riotshield_mp", 90.0),
+            [SHIELD_DROP_PITCH, 90.0, 0.0]
+        );
+        assert_eq!(dropped_angles("m4_reflex_mp", 45.0), [0.0, 45.0, 0.0]);
+    }
 
     fn trace(fraction: f32, normal: [f32; 3], endpos: [f32; 3]) -> trace_iw4::Trace {
         trace_iw4::Trace {
