@@ -280,6 +280,13 @@ impl FrameWorld<'_> {
         Some(item)
     }
 
+    /// Removes the item row and frees its entity slot.
+    pub(crate) fn despawn_dropped_item(&mut self, number: i32) -> Option<DroppedItem> {
+        let item = self.remove_dropped_item_by_number(number)?;
+        self.free_dynamic_entity_number(item.state.number);
+        Some(item)
+    }
+
     pub(crate) fn dropped_item_mut_by_number(&mut self, number: i32) -> Option<&mut DroppedItem> {
         let entity = entity_by_number(self.ecs, number)?;
         Some(&mut self.ecs.get_mut::<DroppedItemRow>(entity)?.into_inner().0)

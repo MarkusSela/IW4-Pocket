@@ -3323,6 +3323,7 @@ impl SimState {
                     clip_l: ammo.clip_l,
                     stock: ammo.stock,
                     scavenger: ammo.scavenger != 0,
+                    drop_seq: 0,
                 }
             })
             .collect();

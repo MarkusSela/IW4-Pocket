@@ -934,7 +934,7 @@ fn register_entities(registry: &mut NativeRegistry) {
             _ => None,
         };
         if let Some(number) = item {
-            crate::frame::FrameWorld::from_world(world).remove_dropped_item_by_number(number);
+            crate::frame::FrameWorld::from_world(world).despawn_dropped_item(number);
         }
         // Script code can still read fields after delete() in the same frame
         // (for example UAV bookkeeping). Retire at the scheduler's frame boundary.

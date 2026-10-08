@@ -150,7 +150,7 @@ pub(crate) fn restart_level(world: &mut World, tick: crate::Tick) {
             frame.remove_projectile_by_number(projectile.entnum);
         }
         for number in frame.dropped_item_numbers_sorted() {
-            frame.remove_dropped_item_by_number(number);
+            frame.despawn_dropped_item(number);
         }
         crate::t5_destructible::restart(&mut frame);
         frame.restart_level_phase();

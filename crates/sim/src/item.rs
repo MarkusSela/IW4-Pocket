@@ -1,6 +1,8 @@
 use crate::frame::FrameWorld;
 use anim_iw4::random;
-use entity_iw4::{TR_GRAVITY, TR_STATIONARY, Trajectory, evaluate_trajectory};
+use entity_iw4::{
+    TR_GRAVITY, TR_STATIONARY, Trajectory, evaluate_trajectory, evaluate_trajectory_delta,
+};
 use math_iw4::angle_vectors;
 use playerstate_iw4::{ENTITYNUM_NONE, PERK_SCAVENGER, PM_TYPE_DEAD, PlayerState};
 use weapon_iw4::{
@@ -38,6 +40,8 @@ pub struct DroppedItem {
     pub clip_l: i32,
     pub stock: i32,
     pub scavenger: bool,
+    /// Drop order among live items: the cap removes the lowest.
+    pub drop_seq: u32,
 }
 
 pub fn random_unit(seed: &mut u32) -> f32 {
@@ -243,16 +247,29 @@ fn push_dropped_item(
     falling: bool,
     scavenger: bool,
 ) -> i32 {
+    let live: Vec<(i32, u32)> = world
+        .dropped_item_numbers_sorted()
+        .into_iter()
+        .filter_map(|number| {
+            world
+                .dropped_item_by_number(number)
+                .map(|item| (number, item.drop_seq))
+        })
+        .collect();
+    let drop_seq = live
+        .iter()
+        .map(|&(_, seq)| seq)
+        .max()
+        .map_or(0, |seq| seq.wrapping_add(1));
     if world.dropped_item_count() >= G_MAX_DROPPED_WEAPONS {
-        let evicted_number = world
-            .dropped_item_numbers_sorted()
-            .into_iter()
-            .next()
-            .expect("cap eviction requires an occupied dropped item");
-        let evicted = world
-            .remove_dropped_item_by_number(evicted_number)
+        // Oldest first. The lowest entity number used to go, but numbers are
+        // reused oldest-freed-first, so a fresh drop often had the lowest one and
+        // vanished at the next death anywhere on the map.
+        let evicted_number =
+            oldest_dropped_number(&live).expect("cap eviction requires an occupied dropped item");
+        world
+            .despawn_dropped_item(evicted_number)
             .expect("cap eviction number vanished");
-        world.free_dynamic_entity_number(evicted.state.number);
     }
     let entnum = match world.allocate_dynamic_entity(crate::gentity::EntityRunKind::Item) {
         Ok(entity) => entity.number(),
@@ -270,8 +287,56 @@ fn push_dropped_item(
         clip_l,
         stock,
         scavenger,
+        drop_seq,
     });
     entnum
+}
+
+fn oldest_dropped_number(live: &[(i32, u32)]) -> Option<i32> {
+    live.iter()
+        .min_by_key(|&&(number, seq)| (seq, number))
+        .map(|&(number, _)| number)
+}
+
+/// Where a falling item goes once its fall is blocked.
+#[derive(Debug, PartialEq)]
+enum BlockedFall {
+    Rest([f32; 3]),
+    Deflect(Trajectory),
+}
+
+/// A floor, or a trace that starts in solid, stops the item. A wall or ceiling
+/// keeps it falling from just off the contact point with the velocity into the
+/// surface removed. Holding it at the contact point instead left it hanging in
+/// the air while clients, who draw the trajectory, showed it flying on through
+/// the wall and under the floor.
+fn blocked_fall(
+    traj: &Trajectory,
+    time_ms: i32,
+    start: [f32; 3],
+    hit: &trace_iw4::Trace,
+) -> BlockedFall {
+    if hit.startsolid != 0 || hit.allsolid != 0 {
+        return BlockedFall::Rest(start);
+    }
+    let n = hit.normal;
+    if n[2] > 0.0 || n[0] * n[0] + n[1] * n[1] + n[2] * n[2] < 0.25 {
+        return BlockedFall::Rest(hit.endpos);
+    }
+    let mut vel = evaluate_trajectory_delta(traj, time_ms);
+    let into = vel[0] * n[0] + vel[1] * n[1] + vel[2] * n[2];
+    if into < 0.0 {
+        for i in 0..3 {
+            vel[i] -= n[i] * into;
+        }
+    }
+    BlockedFall::Deflect(Trajectory {
+        tr_type: TR_GRAVITY,
+        tr_time: time_ms,
+        tr_duration: 0,
+        tr_delta: vel,
+        tr_base: std::array::from_fn(|i| hit.endpos[i] + n[i]),
+    })
 }
 
 fn launch_dropped_from_ps(
@@ -375,33 +440,35 @@ pub(crate) fn think_item_move(world: &mut FrameWorld, time_ms: i32, number: i32)
         tr_delta: item.state.tr_delta,
         tr_base: item.state.tr_base,
     };
+    let start = item.origin;
     let desired = evaluate_trajectory(&traj, time_ms);
-    let hit = world.trace_clip(
-        item.origin,
-        desired,
-        ITEM_MINS,
-        ITEM_MAXS,
-        MASK_PLAYER_SOLID,
-    );
-    let mut fraction = hit.fraction;
-    if hit.startsolid != 0 {
-        fraction = 0.0;
-    }
-    let endpos = if fraction >= 1.0 { desired } else { hit.endpos };
+    let hit = world.trace_clip(start, desired, ITEM_MINS, ITEM_MAXS, MASK_PLAYER_SOLID);
+    let blocked = hit.startsolid != 0 || hit.fraction < 1.0;
     let Some(item) = world.dropped_item_mut_by_number(number) else {
         return;
     };
-    item.origin = endpos;
-    if fraction >= 1.0 {
+    if !blocked {
+        item.origin = desired;
         return;
     }
-    if hit.allsolid != 0 || hit.normal[2] > 0.0 {
-        item.falling = false;
-        item.state.tr_type = TR_STATIONARY;
-        item.state.tr_base = endpos;
-        item.state.tr_delta = [0.0; 3];
-        item.state.tr_time = 0;
-        item.state.tr_duration = 0;
+    match blocked_fall(&traj, time_ms, start, &hit) {
+        BlockedFall::Rest(at) => {
+            item.origin = at;
+            item.falling = false;
+            item.state.tr_type = TR_STATIONARY;
+            item.state.tr_base = at;
+            item.state.tr_delta = [0.0; 3];
+            item.state.tr_time = 0;
+            item.state.tr_duration = 0;
+        }
+        BlockedFall::Deflect(fall) => {
+            item.origin = fall.tr_base;
+            item.state.tr_type = fall.tr_type;
+            item.state.tr_base = fall.tr_base;
+            item.state.tr_delta = fall.tr_delta;
+            item.state.tr_time = fall.tr_time;
+            item.state.tr_duration = fall.tr_duration;
+        }
     }
 }
 
@@ -943,5 +1010,159 @@ pub(crate) fn phase_use_items(
             ps.cursor_hint_string = -1;
             ps.cursor_hint_dual_wield = i32::from(dual);
         }
+    }
+}
+
+#[cfg(test)]
+mod dropped_item_tests {
+    use super::*;
+
+    fn trace(fraction: f32, normal: [f32; 3], endpos: [f32; 3]) -> trace_iw4::Trace {
+        trace_iw4::Trace {
+            fraction,
+            normal,
+            endpos,
+            ..Default::default()
+        }
+    }
+
+    fn arc() -> Trajectory {
+        Trajectory {
+            tr_type: TR_GRAVITY,
+            tr_time: 0,
+            tr_duration: 0,
+            tr_delta: [100.0, 0.0, 10.0],
+            tr_base: [0.0, 0.0, 100.0],
+        }
+    }
+
+    #[test]
+    fn the_oldest_drop_goes_first_whatever_its_number() {
+        assert_eq!(
+            oldest_dropped_number(&[(450, 1), (210, 9), (300, 5)]),
+            Some(450)
+        );
+        assert_eq!(oldest_dropped_number(&[]), None);
+    }
+
+    #[test]
+    fn a_full_cap_keeps_the_newest_sixteen_drops() {
+        fn push(frame: &mut FrameWorld<'_>, scavenger: bool) -> i32 {
+            push_dropped_item(
+                frame,
+                1,
+                [0.0; 3],
+                Trajectory::default(),
+                Trajectory::default(),
+                0,
+                1,
+                0,
+                0,
+                false,
+                scavenger,
+            )
+        }
+        let mut sim = crate::SimWorld::default();
+        let mut frame = sim.frame();
+        let mut t = 0;
+        frame.entity_kernel_mut().begin_frame(t);
+        for _ in 0..G_MAX_DROPPED_WEAPONS {
+            assert_ne!(push(&mut frame, false), ENTITYNUM_NONE);
+        }
+        for _death in 0..20 {
+            t += 2500;
+            frame.entity_kernel_mut().begin_frame(t);
+            push(&mut frame, true);
+            let newest = push(&mut frame, false);
+            let mut seqs: Vec<u32> = frame
+                .dropped_item_numbers_sorted()
+                .into_iter()
+                .filter_map(|n| frame.dropped_item_by_number(n).map(|i| i.drop_seq))
+                .collect();
+            seqs.sort_unstable();
+            assert_eq!(seqs.len(), G_MAX_DROPPED_WEAPONS);
+            assert!(
+                seqs.windows(2).all(|w| w[1] == w[0] + 1),
+                "live drops are not the newest run: {seqs:?}"
+            );
+            let newest_seq = frame.dropped_item_by_number(newest).map(|i| i.drop_seq);
+            assert_eq!(newest_seq, seqs.last().copied());
+        }
+    }
+
+    #[test]
+    fn despawning_a_drop_frees_its_entity_slot() {
+        let mut sim = crate::SimWorld::default();
+        let mut frame = sim.frame();
+        frame.entity_kernel_mut().begin_frame(0);
+        let number = push_dropped_item(
+            &mut frame,
+            1,
+            [0.0; 3],
+            Trajectory::default(),
+            Trajectory::default(),
+            0,
+            1,
+            0,
+            0,
+            false,
+            false,
+        );
+        assert!(frame.entity_kernel().occupied_kind(number).is_some());
+        assert!(frame.despawn_dropped_item(number).is_some());
+        assert_eq!(frame.entity_kernel().occupied_kind(number), None);
+        assert!(frame.despawn_dropped_item(number).is_none());
+    }
+
+    #[test]
+    fn a_wall_hit_slides_the_item_down_the_wall() {
+        let hit = trace(0.5, [-1.0, 0.0, 0.0], [9.0, 0.0, 104.0]);
+        let BlockedFall::Deflect(fall) = blocked_fall(&arc(), 50, [0.0, 0.0, 100.0], &hit) else {
+            panic!("a wall must not stop the fall");
+        };
+        assert_eq!(fall.tr_base, [8.0, 0.0, 104.0]);
+        assert_eq!(fall.tr_delta[0], 0.0);
+        assert_eq!(fall.tr_time, 50);
+        for t in [150, 350] {
+            let p = evaluate_trajectory(&fall, t);
+            assert!(p[0] <= 9.0, "went through the wall: {p:?}");
+        }
+        assert!(evaluate_trajectory(&fall, 350)[2] < evaluate_trajectory(&fall, 150)[2]);
+    }
+
+    #[test]
+    fn a_ceiling_hit_drops_the_upward_speed() {
+        let up = Trajectory {
+            tr_delta: [50.0, 0.0, 120.0],
+            ..arc()
+        };
+        let hit = trace(0.5, [0.0, 0.0, -1.0], [2.0, 0.0, 110.0]);
+        let BlockedFall::Deflect(fall) = blocked_fall(&up, 0, [0.0, 0.0, 100.0], &hit) else {
+            panic!("a ceiling must not stop the fall");
+        };
+        assert_eq!(fall.tr_delta[2], 0.0);
+        assert_eq!(fall.tr_delta[0], 50.0);
+    }
+
+    #[test]
+    fn a_floor_or_a_stuck_start_stops_the_item() {
+        let floor = trace(0.5, [0.0, 0.0, 1.0], [5.0, 0.0, 0.0]);
+        assert_eq!(
+            blocked_fall(&arc(), 50, [0.0, 0.0, 100.0], &floor),
+            BlockedFall::Rest([5.0, 0.0, 0.0])
+        );
+        let stuck = trace_iw4::Trace {
+            startsolid: 1,
+            ..trace(0.0, [0.0; 3], [0.0, 0.0, 100.0])
+        };
+        assert_eq!(
+            blocked_fall(&arc(), 50, [1.0, 2.0, 3.0], &stuck),
+            BlockedFall::Rest([1.0, 2.0, 3.0])
+        );
+        let no_normal = trace(0.5, [0.0; 3], [4.0, 0.0, 50.0]);
+        assert_eq!(
+            blocked_fall(&arc(), 50, [0.0, 0.0, 100.0], &no_normal),
+            BlockedFall::Rest([4.0, 0.0, 50.0])
+        );
     }
 }
