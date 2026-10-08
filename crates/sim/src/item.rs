@@ -474,6 +474,23 @@ pub(crate) fn think_item_move(world: &mut FrameWorld, time_ms: i32, number: i32)
             outcome = Some(BlockedFall::Rest(hit.endpos));
         } else {
             fall.tr_base = off.endpos;
+            if off.fraction < 1.0 {
+                // A crease: slide along the second surface too, and if that still
+                // points back into the first, drop straight down between them
+                // instead of bouncing from one to the other in mid-air.
+                let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+                let vel = &mut fall.tr_delta;
+                let into = dot(*vel, off.normal);
+                if into < 0.0 {
+                    for i in 0..3 {
+                        vel[i] -= off.normal[i] * into;
+                    }
+                }
+                if dot(*vel, hit.normal) < 0.0 {
+                    vel[0] = 0.0;
+                    vel[1] = 0.0;
+                }
+            }
         }
     }
     let Some(item) = world.dropped_item_mut_by_number(number) else {
