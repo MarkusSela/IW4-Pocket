@@ -92,6 +92,21 @@ pub fn add_runtime_plugins_with_role(app: &mut App, role: RuntimeRole) {
         render_app.edit_schedule(bevy::render::ExtractSchedule, |schedule| {
             schedule.set_executor(bevy::ecs::schedule::SingleThreadedExecutor::new());
         });
+        if pipelined_rendering() && cfg!(any(target_os = "macos", target_os = "ios")) {
+            // Pipelined, the Render schedule runs on the render thread, and with the
+            // single-threaded executors above Bevy never hands `create_surfaces` (a
+            // NonSend system) back to the main thread: building the layer there
+            // panics in raw-window-metal. Extraction runs on the main thread, so the
+            // surface is created and configured there; the Render instance then finds
+            // it configured, and a resize only reconfigures it, which wgpu allows off
+            // the main thread.
+            render_app.add_systems(
+                bevy::render::ExtractSchedule,
+                bevy::render::view::create_surfaces
+                    .run_if(bevy::render::view::need_surface_configuration)
+                    .after(bevy::render::camera::extract_cameras),
+            );
+        }
     }
 }
 
@@ -183,11 +198,13 @@ const PIPELINED_RENDERING_ENV: &str = "IW4L_PIPELINED_RENDERING";
 /// boundary; the bounded render channel permits one outstanding frame.
 /// Set IW4L_PIPELINED_RENDERING=0 for synchronous presentation.
 ///
-/// Off by default on macOS and iOS: AppKit only lets the main thread touch the NSView
-/// behind the Metal surface. Bevy hands `create_surfaces` back to the main
-/// thread through the multi-threaded executor, which the single-threaded
-/// `Render` schedule above bypasses, so the render thread would create it and
-/// panic in `raw-window-metal`.
+/// Off by default on macOS and iOS. AppKit and UIKit only let the main thread touch
+/// the view behind the Metal surface; Bevy hands `create_surfaces` back to the main
+/// thread through the multi-threaded executor, which the single-threaded `Render`
+/// schedule above bypasses, so the surface is created during extraction (main
+/// thread) instead when this is on. Measured on an M3 (mp_terminal, 10 players,
+/// uncapped): 86 → 101 fps average, p50 10.2 → 8.7 ms, one frame more latency.
+/// `IW4L_PIPELINED_RENDERING=1` in iw4l-env.txt turns it on for the phone.
 fn pipelined_rendering() -> bool {
     match std::env::var_os(PIPELINED_RENDERING_ENV) {
         None => !cfg!(any(target_os = "macos", target_os = "ios")),

@@ -184,6 +184,8 @@ pub fn valid_file_setting(name: &str, value: &str) -> bool {
         // with a pace); log the on-screen frame timing every 128 presents.
         "IW4L_FRAME_PACE" => matches!(value, "off" | "0" | "30" | "40" | "60"),
         "IW4L_DT_SNAP" | "IW4L_FRAME_STATS" => matches!(value, "0" | "1"),
+        // Render on its own thread, one frame behind the main loop (off by default).
+        "IW4L_PIPELINED_RENDERING" => matches!(value, "0" | "1"),
         _ => false,
     }
 }
