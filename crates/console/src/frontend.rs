@@ -677,6 +677,11 @@ pub(crate) fn route(
         );
     }
     dvars.set("ui_lobby_host", if party.is_host { "1" } else { "0" });
+    let private_host = party.in_lobby && party.is_host && !state.public;
+    dvars.set(
+        hud::ENDROUND_HOST_DVAR,
+        if private_host { "1" } else { "0" },
+    );
     dvars.set("ui_lobby_public", if state.public { "1" } else { "0" });
     dvars.set(
         "ui_lobby_privacy",

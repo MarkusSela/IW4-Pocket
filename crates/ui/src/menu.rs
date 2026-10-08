@@ -102,8 +102,11 @@ pub fn install_frontend_menus(catalog: &mut asset_game::MenuCatalog) -> Result<(
         if matches!(name.as_str(), "popup_endgame" | "popup_endgame_ranked") {
             for item in &mut menu.items {
                 if item.name == "button_yes" {
+                    // MW2's own response: the host ends the match through forceEnd,
+                    // so it ends as a match end. The hud turns it into a disconnect
+                    // for anyone but the host of a private lobby.
                     item.handlers.action = vec![asset_game::MenuEvent::Script(
-                        "play mouse_click; close self; exec \"disconnect\";".into(),
+                        "play mouse_click; close self; scriptmenuresponse \"endround\";".into(),
                     )];
                 }
             }

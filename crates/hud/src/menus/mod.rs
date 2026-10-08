@@ -777,6 +777,10 @@ fn handle_input(
     }
 }
 
+/// Set by the frontend while the local player hosts a private lobby: End Game then
+/// ends the match (MW2's "endround") instead of disconnecting.
+pub const ENDROUND_HOST_DVAR: &str = "ui_lobby_private_host";
+
 fn flush_outputs(menus: &mut ScriptMenus, out: &mut MenuOutputs, local: sim::ClientId) {
     for command in menus.bind_requests.drain(..) {
         out.binds.write(frame::UiBindRequest { command });
@@ -788,6 +792,20 @@ fn flush_outputs(menus: &mut ScriptMenus, out: &mut MenuOutputs, local: sim::Cli
         diag::info!(Ui, "menu exec: {text}");
         out.exec.write(UiExecCommand { text });
     }
+    let private_host = out.dvars.get(ENDROUND_HOST_DVAR) == Some("1");
+    menus.responses.retain(|(menu, response)| {
+        let end_game = menu.eq_ignore_ascii_case("popup_endgame")
+            || menu.eq_ignore_ascii_case("popup_endgame_ranked");
+        if !end_game || !response.eq_ignore_ascii_case("endround") || private_host {
+            return true;
+        }
+        // Public lobbies and clients leave as before: ending the match there would
+        // keep the session the host meant to quit.
+        out.exec.write(UiExecCommand {
+            text: "disconnect".into(),
+        });
+        false
+    });
     let (Some(inbox), Some(ids)) = (out.inbox.as_mut(), out.ids.as_mut()) else {
         menus.responses.clear();
         return;
