@@ -297,7 +297,7 @@ pub use spark_fountain::{
     spark_fountain_accel_from_gravity, spark_fountain_atlas_uv, spark_fountain_ballistic,
     spark_fountain_boost, spark_fountain_bounce_vel, spark_fountain_cell_indices,
     spark_fountain_cell_verts, spark_fountain_cluster_draw_allows, spark_fountain_cone_dir,
-    spark_fountain_cone_is_isotropic, spark_fountain_def_allows_draw,
+    spark_fountain_cone_is_isotropic, spark_fountain_def_allows_draw, spark_fountain_draw_cloud,
     spark_fountain_draw_clouds_allows, spark_fountain_generate_ribbon,
     spark_fountain_handle_for_slot, spark_fountain_hit_time, spark_fountain_hit_time_abs,
     spark_fountain_index_count, spark_fountain_integrate_cell, spark_fountain_integrate_cell_begin,

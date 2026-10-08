@@ -3,9 +3,9 @@ use fx_iw4::{
     FX_SPARK_FOUNTAIN_INTEGRATE_BUDGET, FX_SPARK_FOUNTAIN_INTEGRATE_CELLS, msvcrt_rand,
     spark_fountain_accel_from_gravity, spark_fountain_cone_dir, spark_fountain_handle_for_slot,
     spark_fountain_integrate_cell, spark_fountain_integrate_cell_begin,
-    spark_fountain_isotropic_dir, spark_fountain_mark_ready, spark_fountain_slot_for_handle,
-    spark_fountain_spark_n_clamped, spark_fountain_speed, spark_fountain_spray_dir,
-    spark_fountain_update_keyframe_cursor,
+    spark_fountain_integrate_miss_cell, spark_fountain_isotropic_dir, spark_fountain_mark_ready,
+    spark_fountain_slot_for_handle, spark_fountain_spark_n_clamped, spark_fountain_speed,
+    spark_fountain_spray_dir, spark_fountain_update_keyframe_cursor,
 };
 
 use crate::system::FxSystemHost;
@@ -32,6 +32,9 @@ pub struct FxSparkFountainClusterSlot {
     pub loop_time: f32,
     pub boost_time: f32,
     pub boost_factor: f32,
+    /// World point the sparks were sprayed from; they never follow the elem after.
+    pub origin: [f32; 3],
+    pub max_speed: f32,
     pub mesh_idx: [u16; FX_SPARK_FOUNTAIN_CLUSTER_MESH_MAX as usize],
 }
 
@@ -51,6 +54,8 @@ impl Default for FxSparkFountainClusterSlot {
             loop_time: 0.0,
             boost_time: 0.0,
             boost_factor: 0.0,
+            origin: [0.0; 3],
+            max_speed: 0.0,
             mesh_idx: [FX_SPARK_FOUNTAIN_HANDLE_NONE; FX_SPARK_FOUNTAIN_CLUSTER_MESH_MAX as usize],
         }
     }
@@ -215,15 +220,17 @@ pub(crate) fn spray_spark_fountain(
             let rx = msvcrt_rand(&mut hold);
             let dir = spark_fountain_spray_dir(cone_axis, [rx, ry, rz], vel_cone_frac);
             let speed = spark_fountain_speed(msvcrt_rand(&mut hold), vel_min, vel_max);
+            // Until the update traces a cell it flies as an unobstructed arc. Leaving
+            // every sample time at 0 instead made the ribbon end at origins[3], which
+            // is (0,0,0): a quad parked at the world origin for most of the cells.
+            let (times, origins, vels) = spark_fountain_integrate_miss_cell(
+                origin,
+                [dir[0] * speed, dir[1] * speed, dir[2] * speed],
+            );
             host.spark_fountain_meshes[mesh].cells[cell as usize] = FxSparkFountainCell {
-                times: [0.0; 4],
-                origins: [origin, [0.0; 3], [0.0; 3], [0.0; 3]],
-                vels: [
-                    [dir[0] * speed, dir[1] * speed, dir[2] * speed],
-                    [0.0; 3],
-                    [0.0; 3],
-                    [0.0; 3],
-                ],
+                times,
+                origins,
+                vels,
             };
             cell = cell.saturating_add(1);
         }
@@ -243,7 +250,29 @@ pub(crate) fn spray_spark_fountain(
     host.spark_fountains[dense].loop_time = loop_time;
     host.spark_fountains[dense].boost_time = boost_time;
     host.spark_fountains[dense].boost_factor = boost_factor;
+    host.spark_fountains[dense].origin = origin;
+    host.spark_fountains[dense].max_speed = vel_min.abs().max(vel_max.abs());
     FountainSpray::Ready
+}
+
+/// The sphere the sparks of a fountain occupy at `age_msec`: the spray point and
+/// how far a spark can have flown from it. A spark's path is at most
+/// `max_speed * t + |gravity| * t^2 / 2` long by sample time `t`, and a bounce scales
+/// its speed by `bounce_frac`. The elem's own origin keeps moving with its velocity
+/// graph (0.4 units/ms on most fountains), so it says nothing about the sparks.
+pub(crate) fn spark_fountain_reach(
+    host: &FxSystemHost,
+    handle: u16,
+    age_msec: i32,
+) -> Option<([f32; 3], f32)> {
+    use fx_iw4::{spark_fountain_boost, spark_fountain_wrap_loop_time};
+    let dense = spark_fountain_slot_for_handle(handle)?;
+    let cluster = host.spark_fountains.get(dense).filter(|c| c.occupied)?;
+    let (warped, _) =
+        spark_fountain_boost(cluster.boost_time, cluster.boost_factor, age_msec as f32);
+    let t = spark_fountain_wrap_loop_time(warped, cluster.loop_time).max(0.0);
+    let path = cluster.max_speed * t + 0.5 * cluster.gravity.abs() * t * t;
+    Some((cluster.origin, path * cluster.bounce_frac.abs().max(1.0)))
 }
 
 pub(crate) fn emit_spark_fountain_custom_cells(
@@ -376,4 +405,188 @@ pub(crate) fn update_spark_fountain(
     let (write, keyframe) = spark_fountain_update_keyframe_cursor(write, keyframe, spark_n);
     host.spark_fountains[dense].write_spark = write;
     host.spark_fountains[dense].keyframe = keyframe;
+}
+
+#[cfg(test)]
+mod fountain_space_tests {
+    use super::*;
+
+    const ORIGIN: [f32; 3] = [1200.0, -800.0, 40.0];
+    const VEL_MAX: f32 = 0.3;
+    const GRAVITY: f32 = -0.0005;
+    const SIZE0: f32 = 1.0;
+
+    /// mp_terminal's card-touchpad spark fountain (props/credit_card_touchpad_exp).
+    fn sprayed_touchpad_fountain() -> (FxSystemHost, u16) {
+        let mut host = FxSystemHost::new();
+        let handle = alloc_spark_fountain(&mut host).expect("fountain slot");
+        let spray = spray_spark_fountain(
+            &mut host,
+            handle,
+            ORIGIN,
+            [0.0, 0.0, 1.0],
+            0x2600_0086,
+            32,
+            0.0,
+            VEL_MAX,
+            0.5,
+            GRAVITY,
+            50.0,
+            2000.0,
+            0.0,
+            0.0,
+            0.5,
+            0.0,
+        );
+        assert_eq!(spray, FountainSpray::Ready);
+        (host, handle)
+    }
+
+    fn reach(age: f32) -> f32 {
+        VEL_MAX * age + 0.5 * -GRAVITY * age * age + SIZE0
+    }
+
+    fn dist(a: [f32; 3], b: [f32; 3]) -> f32 {
+        ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+    }
+
+    #[test]
+    fn untraced_cells_draw_as_arcs_from_the_spray_point() {
+        let (host, handle) = sprayed_touchpad_fountain();
+        let camera = [1400.0, -800.0, 100.0];
+        for age in [10, 60, 300, 1500] {
+            let cells = emit_spark_fountain_custom_cells(&host, handle, camera, SIZE0, age);
+            assert_eq!(
+                cells.len(),
+                (FX_SPARK_FOUNTAIN_CLUSTER_MESH_MAX * FX_SPARK_FOUNTAIN_CELLS) as usize
+            );
+            for v in cells.iter().flatten() {
+                let d = dist(v.xyz, ORIGIN);
+                assert!(
+                    d <= reach(age as f32),
+                    "age {age}: vertex {:?} is {d} away",
+                    v.xyz
+                );
+                assert!(
+                    dist(v.xyz, [0.0; 3]) > 100.0,
+                    "age {age}: vertex at the map origin"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tracing_with_no_hit_leaves_the_arcs_unchanged() {
+        let (mut host, handle) = sprayed_touchpad_fountain();
+        let camera = [1400.0, -800.0, 100.0];
+        let before = emit_spark_fountain_custom_cells(&host, handle, camera, SIZE0, 300);
+        for _ in 0..200 {
+            update_spark_fountain(&mut host, handle, |_, _| (1.0, [0.0, 0.0, 1.0]));
+        }
+        let after = emit_spark_fountain_custom_cells(&host, handle, camera, SIZE0, 300);
+        assert_eq!(before.len(), after.len());
+        for (a, b) in before.iter().flatten().zip(after.iter().flatten()) {
+            assert_eq!(a.xyz, b.xyz);
+        }
+    }
+    #[test]
+    fn cull_sphere_holds_every_spark() {
+        let (mut host, handle) = sprayed_touchpad_fountain();
+        let camera = [1400.0, -800.0, 100.0];
+        for traced in [false, true] {
+            if traced {
+                // A floor 20 units below the spray point: sparks bounce off it.
+                for _ in 0..200 {
+                    update_spark_fountain(&mut host, handle, |a, b| {
+                        let floor = ORIGIN[2] - 20.0;
+                        if b[2] >= floor || a[2] < floor {
+                            (1.0, [0.0, 0.0, 1.0])
+                        } else {
+                            ((a[2] - floor) / (a[2] - b[2]), [0.0, 0.0, 1.0])
+                        }
+                    });
+                }
+            }
+            for age in [10, 60, 300, 1500, 1999] {
+                let (center, reach) = spark_fountain_reach(&host, handle, age).expect("live");
+                assert_eq!(center, ORIGIN);
+                let cells = emit_spark_fountain_custom_cells(&host, handle, camera, SIZE0, age);
+                for v in cells.iter().flatten() {
+                    let d = dist(v.xyz, center);
+                    assert!(
+                        d <= reach + SIZE0,
+                        "traced {traced} age {age}: {d} > reach {reach}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_effect_relative_fountain_sprays_from_its_world_point() {
+        let mut host = FxSystemHost::new();
+        let elem = crate::def::FxElemDefInfo {
+            elem_type: fx_iw4::FX_ELEM_TYPE_SPARK_FOUNTAIN,
+            life_base: 2000,
+            flags: fx_iw4::FX_ELEM_RUN_RELATIVE_TO_EFFECT,
+            visual_count: 1,
+            spawn_origin: [[10.0, 0.0], [20.0, 0.0], [5.0, 0.0]],
+            spark_count: 4,
+            spark_vel_max: VEL_MAX,
+            spark_gravity: GRAVITY,
+            spark_length: 50.0,
+            spark_loop_time: 2000.0,
+            ..Default::default()
+        };
+        // Facing +Y: the elem's local offset is rotated before it reaches the world.
+        let axis = [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]];
+        let played = crate::play::play_oriented(
+            &mut host,
+            crate::play::FxPlayRequest {
+                def_name: "test/fountain",
+                pose: crate::play::FxPlayPose {
+                    origin: ORIGIN,
+                    axis,
+                    msec: 0,
+                },
+                wants_spotlight: false,
+                def: Some(crate::def::FxEffectDefInfo {
+                    msec_looping_life: 0,
+                    looping_count: 1,
+                    one_shot_count: 0,
+                    emission_count: 0,
+                    elems: &[elem],
+                }),
+                catalog_index: 0,
+            },
+        );
+        assert!(played.handle().is_some(), "{played:?}");
+        let slot = host
+            .elems
+            .iter()
+            .find(|e| e.occupied && e.elem_type == fx_iw4::FX_ELEM_TYPE_SPARK_FOUNTAIN)
+            .expect("fountain elem");
+        let (center, _) = spark_fountain_reach(&host, slot.spark_cloud_handle, 0).expect("live");
+        let effect = host
+            .effect_at(usize::from(slot.owner_effect_slot))
+            .expect("owning effect");
+        let seed = fx_iw4::elem_random_seed(effect.random_seed, slot.sequence, slot.msec_begin);
+        let world = fx_iw4::spawn_origin_world(
+            ORIGIN,
+            axis,
+            elem.spawn_origin,
+            elem.flags,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            seed,
+        );
+        assert!(dist(world, ORIGIN) > 20.0, "the offset must move the point");
+        assert_eq!(center, world);
+        assert_ne!(
+            center, slot.origin,
+            "the elem keeps its effect-local origin"
+        );
+    }
 }

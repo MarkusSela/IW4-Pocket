@@ -1,4 +1,4 @@
-use crate::particle_cloud::{GfxPosTexVertex, particle_spark_cell_indices};
+use crate::particle_cloud::{GfxParticleCloud, GfxPosTexVertex, particle_spark_cell_indices};
 use crate::vec::vec3_normalize;
 
 pub const FX_SPARK_FOUNTAIN_CLUSTER_STRIDE: usize = 0x40;
@@ -578,6 +578,21 @@ pub fn spark_fountain_atlas_uv(col_bits: u8, row_bits: u8, cell: u32) -> [f32; 4
     [u0, u_span, v0, v_span]
 }
 
+/// The cloud a fountain's custom draw is submitted with. Fountain cells are built in
+/// world space, and the sparkf shader is only pos * worldView * proj, so the cloud's
+/// placement must not move them again. The vis scale (150 on prop sparks) arrives as
+/// placement_scale: it gates the draw and sizes the cull sphere, it is not a world
+/// scale for these vertices.
+#[inline]
+pub fn spark_fountain_draw_cloud(cloud: GfxParticleCloud) -> GfxParticleCloud {
+    GfxParticleCloud {
+        quat: [0.0, 0.0, 0.0, 1.0],
+        pos: [0.0; 3],
+        placement_scale: 1.0,
+        ..cloud
+    }
+}
+
 pub const R_PARTICLE_CLOUD_CUSTOM_CAP: u32 = 0x40;
 
 #[inline]
@@ -716,4 +731,46 @@ pub fn spark_fountain_cell_verts(
 #[inline]
 pub fn spark_fountain_cell_indices(cell: u32) -> [u16; 18] {
     particle_spark_cell_indices(cell)
+}
+
+#[cfg(test)]
+mod draw_cloud_tests {
+    use super::*;
+
+    #[test]
+    fn fountain_draws_with_a_unit_placement_and_keeps_its_look() {
+        let cloud = GfxParticleCloud {
+            quat: [0.0, 0.0, 0.70710677, 0.70710677],
+            pos: [1200.0, -800.0, 40.0],
+            placement_scale: 150.0,
+            axis_or_vel: [0.0, 0.0, 0.1],
+            color: 0xff40_80c0,
+            size0: 1.0,
+            size1: 2.0,
+            flags: 0x10,
+            scale: 375.0,
+        };
+        let drawn = spark_fountain_draw_cloud(cloud);
+        assert_eq!(drawn.quat, [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(drawn.pos, [0.0; 3]);
+        assert_eq!(drawn.placement_scale, 1.0);
+        assert_eq!(
+            (
+                drawn.axis_or_vel,
+                drawn.color,
+                drawn.size0,
+                drawn.size1,
+                drawn.flags,
+                drawn.scale
+            ),
+            (
+                cloud.axis_or_vel,
+                cloud.color,
+                cloud.size0,
+                cloud.size1,
+                cloud.flags,
+                cloud.scale
+            )
+        );
+    }
 }

@@ -162,6 +162,7 @@ pub struct FxJournalCursor {
 
     pub createfx_boot_msec: Option<i32>,
     pub draw_logged: bool,
+    pub fountains_logged: std::collections::HashSet<String>,
     pub draw_miss_material: u32,
     pub skipped_no_ordinal: u32,
     pub skipped_not_emissive: u32,

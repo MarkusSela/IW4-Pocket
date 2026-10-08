@@ -989,6 +989,20 @@ fn commit_fx_transaction(
                 sort_key,
                 ordinal,
             } => {
+                if !cursor.fountains_logged.contains(&fountain.def_name) {
+                    let [x, y, z] = fountain.cloud.pos;
+                    diag::info!(
+                        World,
+                        "fx: spark fountain {} elem {} at {x:.0},{y:.0},{z:.0} scale={} size0={} \
+                         cells={} (once per effect)",
+                        fountain.def_name,
+                        fountain.def_index,
+                        fountain.cloud.placement_scale,
+                        fountain.cloud.size0,
+                        fountain.cells.len()
+                    );
+                    cursor.fountains_logged.insert(fountain.def_name.clone());
+                }
                 if spark_plan
                     .begin_custom_draw(
                         color,

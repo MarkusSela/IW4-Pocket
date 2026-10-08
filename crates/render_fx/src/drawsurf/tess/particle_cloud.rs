@@ -171,12 +171,13 @@ impl FxParticleCloudPlan {
             sort_key,
             material_sorted_index,
         });
+        let placed = fx_iw4::spark_fountain_draw_cloud(cloud);
         let empty = fx_iw4::empty_particle_cloud();
         self.draws.push(FxParticleCloudDraw {
             material,
             index_start,
             index_count: spark_fountain_index_count(cells.len() as u32),
-            clouds: [cloud, empty, empty],
+            clouds: [placed, empty, empty],
         });
         self.custom_live = self.custom_live.saturating_add(1);
         Some(self.draws.len() as u32 - 1)
