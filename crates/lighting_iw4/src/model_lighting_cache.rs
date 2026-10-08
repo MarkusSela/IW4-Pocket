@@ -260,3 +260,143 @@ impl<'a> ModelLightingCacheGlob<'a> {
         ModelLightingCacheAlloc::Failed
     }
 }
+
+#[cfg(test)]
+mod in_place_tests {
+    extern crate std;
+
+    use super::*;
+    use std::vec;
+    use std::vec::Vec;
+
+    const BASE: u32 = 3072;
+    const LIMIT: u32 = 64;
+
+    /// The cache's per-frame state, driven the way the frontend drives it.
+    struct Cache {
+        bits: [Vec<u32>; MODEL_LIGHTING_PIXEL_FREE_BITS_BUFFERS],
+        frame: u32,
+        rover: u32,
+        fail: bool,
+        origins: Vec<[f32; 3]>,
+        info: Vec<u16>,
+    }
+
+    impl Cache {
+        fn new() -> Self {
+            let words = model_lighting_cache_free_bits_words(LIMIT);
+            Self {
+                bits: std::array::from_fn(|_| vec![!0u32; words]),
+                frame: 0,
+                rover: 0,
+                fail: false,
+                origins: vec![[0.0; 3]; LIMIT as usize],
+                info: vec![0; LIMIT as usize],
+            }
+        }
+
+        fn next_frame(&mut self) {
+            let [a, b, c, d] = &mut self.bits;
+            toggle_dyn_model_lighting_frame(
+                &mut [
+                    a.as_mut_slice(),
+                    b.as_mut_slice(),
+                    c.as_mut_slice(),
+                    d.as_mut_slice(),
+                ],
+                &mut self.frame,
+                &mut self.fail,
+            );
+        }
+
+        fn alloc(
+            &mut self,
+            handle: u16,
+            origin: [f32; 3],
+            in_place: bool,
+        ) -> ModelLightingCacheAlloc {
+            let i = dyn_pixel_free_bits_index(self.frame, 0);
+            let p = dyn_pixel_free_bits_index(self.frame, 1);
+            let pp = dyn_pixel_free_bits_index(self.frame, 2);
+            let mut curr = std::mem::take(&mut self.bits[i]);
+            let out = ModelLightingCacheGlob::new(
+                BASE,
+                LIMIT,
+                &mut self.rover,
+                &mut self.fail,
+                &mut self.origins,
+                &mut self.info,
+                &self.bits[pp],
+                &self.bits[p],
+                &mut curr,
+            )
+            .expect("valid limits")
+            .alloc(handle, origin, in_place);
+            self.bits[i] = curr;
+            out
+        }
+
+        fn free(&self) -> u32 {
+            let i = dyn_pixel_free_bits_index(self.frame, 0);
+            let p = dyn_pixel_free_bits_index(self.frame, 1);
+            let pp = dyn_pixel_free_bits_index(self.frame, 2);
+            model_lighting_cache_free_slot_count(
+                &self.bits[pp],
+                &self.bits[p],
+                &self.bits[i],
+                LIMIT,
+            )
+        }
+    }
+
+    fn handle_of(alloc: ModelLightingCacheAlloc) -> u16 {
+        match alloc {
+            ModelLightingCacheAlloc::Assigned { handle, .. }
+            | ModelLightingCacheAlloc::Reused { handle, .. } => handle,
+            ModelLightingCacheAlloc::Failed => 0,
+        }
+    }
+
+    #[test]
+    fn a_mover_updating_in_place_holds_one_slot() {
+        let mut cache = Cache::new();
+        let mut handle = 0;
+        for frame in 0..5 {
+            cache.next_frame();
+            handle = handle_of(cache.alloc(handle, [frame as f32, 0.0, 0.0], true));
+        }
+        assert_ne!(handle, 0);
+        assert_eq!(cache.free(), LIMIT - 1);
+    }
+
+    #[test]
+    fn a_mover_taking_new_slots_holds_three() {
+        let mut cache = Cache::new();
+        let mut handle = 0;
+        for frame in 0..5 {
+            cache.next_frame();
+            handle = handle_of(cache.alloc(handle, [frame as f32, 0.0, 0.0], false));
+        }
+        assert_eq!(cache.free(), LIMIT - 3);
+    }
+
+    #[test]
+    fn an_owner_keeps_its_slot_when_the_pool_is_full() {
+        let mut cache = Cache::new();
+        cache.next_frame();
+        let handles: Vec<u16> = (0..LIMIT)
+            .map(|n| handle_of(cache.alloc(0, [n as f32, 1.0, 0.0], false)))
+            .collect();
+        assert!(handles.iter().all(|&h| h != 0));
+        assert!(matches!(
+            cache.alloc(0, [999.0, 0.0, 0.0], false),
+            ModelLightingCacheAlloc::Failed
+        ));
+        // The same frame, the pool now marked failed: the first owner moves.
+        let moved = cache.alloc(handles[0], [0.0, 2.0, 0.0], true);
+        assert!(
+            matches!(moved, ModelLightingCacheAlloc::Assigned { handle, .. } if handle == handles[0]),
+            "{moved:?}"
+        );
+    }
+}
