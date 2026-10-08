@@ -17,7 +17,14 @@ impl Default for NativeRegistry {
             }
             let defined = match &args[0] {
                 Value::Undefined => false,
-                Value::Object(id) => world.resource::<Runtime>().live(id),
+                // delete() retires an entity at the frame boundary so its fields stay
+                // readable for the rest of the frame, but in IW4 a deleted entity tests
+                // undefined at once: _pipes deletes its sound and then runs
+                // array_removeUndefined, and kept stepping on the dead sound otherwise.
+                Value::Object(id) => {
+                    let runtime = world.resource::<Runtime>();
+                    runtime.live(id) && !runtime.pending_deletes.contains(id)
+                }
                 _ => true,
             };
             Ok(Value::Int(i32::from(defined)))
