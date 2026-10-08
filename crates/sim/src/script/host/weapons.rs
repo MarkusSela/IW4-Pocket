@@ -382,8 +382,15 @@ fn settle_items(world: &mut World) {
             });
             raise(world, receiver.clone(), "trigger", vec![player, swapped]);
         }
-        retire(world, object);
-        retired.push(object);
+        // A gun someone only took ammo from is still on the ground, and its
+        // watchPickup thread keeps waiting on it.
+        if FrameWorld::from_world(world)
+            .dropped_item_by_number(pickup.from_entnum)
+            .is_none()
+        {
+            retire(world, object);
+            retired.push(object);
+        }
     }
     for (object, number, _) in items {
         if !retired.contains(&object)

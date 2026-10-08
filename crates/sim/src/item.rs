@@ -292,6 +292,21 @@ fn push_dropped_item(
     entnum
 }
 
+/// Takes up to `room` rounds from a dropped gun, from its stock first, then the
+/// right clip, then the left. Returns the rounds taken and what the gun keeps.
+fn split_item_ammo(room: i32, clip_r: i32, clip_l: i32, stock: i32) -> (i32, [i32; 3]) {
+    let mut room = room.max(0);
+    let mut take = |have: i32| {
+        let from = have.max(0).min(room);
+        room -= from;
+        (from, have - from)
+    };
+    let (from_stock, stock) = take(stock);
+    let (from_r, clip_r) = take(clip_r);
+    let (from_l, clip_l) = take(clip_l);
+    (from_stock + from_r + from_l, [clip_r, clip_l, stock])
+}
+
 fn oldest_dropped_number(live: &[(i32, u32)]) -> Option<i32> {
     live.iter()
         .min_by_key(|&&(number, seq)| (seq, number))
@@ -444,14 +459,31 @@ pub(crate) fn think_item_move(world: &mut FrameWorld, time_ms: i32, number: i32)
     let desired = evaluate_trajectory(&traj, time_ms);
     let hit = world.trace_clip(start, desired, ITEM_MINS, ITEM_MAXS, MASK_PLAYER_SOLID);
     let blocked = hit.startsolid != 0 || hit.fraction < 1.0;
+    let mut outcome = blocked.then(|| blocked_fall(&traj, time_ms, start, &hit));
+    if let Some(BlockedFall::Deflect(fall)) = &mut outcome {
+        // The push off the surface can land in a second one in a tight gap or an
+        // acute corner; go only as far as is clear, and stop if nothing is.
+        let off = world.trace_clip(
+            hit.endpos,
+            fall.tr_base,
+            ITEM_MINS,
+            ITEM_MAXS,
+            MASK_PLAYER_SOLID,
+        );
+        if off.startsolid != 0 || off.fraction <= 0.0 {
+            outcome = Some(BlockedFall::Rest(hit.endpos));
+        } else {
+            fall.tr_base = off.endpos;
+        }
+    }
     let Some(item) = world.dropped_item_mut_by_number(number) else {
         return;
     };
-    if !blocked {
+    let Some(outcome) = outcome else {
         item.origin = desired;
         return;
-    }
-    match blocked_fall(&traj, time_ms, start, &hit) {
+    };
+    match outcome {
         BlockedFall::Rest(at) => {
             item.origin = at;
             item.falling = false;
@@ -566,8 +598,27 @@ fn grab_number(world: &mut FrameWorld, walker: ClientId, number: i32) {
     };
     let picker_pm_type = ps.pm_type;
     let already_has = player_weapons_find_slot(&ps.weapons, weapon as i32) >= 0;
-    world.remove_dropped_item_by_number(number);
-    world.free_dynamic_entity_number(item.state.number);
+    // Walking over a gun you already carry takes only the ammo you have room for.
+    // The gun stays with the rest: the game's watchPickup keeps waiting on an item
+    // after a trigger that swapped nothing ("merely acquired ammo").
+    let (taken, left) = if already_has {
+        let (_, _, have_stock) = ammo_from_ps(world, &ps, weapon);
+        let room = world
+            .combat_facts_for(weapon)
+            .map_or(0, |facts| facts.max_ammo.saturating_sub(have_stock));
+        split_item_ammo(room, item.clip_r, item.clip_l, item.stock)
+    } else {
+        (0, [0; 3])
+    };
+    let stays = already_has && left.iter().any(|&ammo| ammo > 0);
+    if stays {
+        let row = world
+            .dropped_item_mut_by_number(number)
+            .expect("touched item vanished");
+        [row.clip_r, row.clip_l, row.stock] = left;
+    } else {
+        world.despawn_dropped_item(number);
+    }
     let mut swapped_entnum = ENTITYNUM_NONE;
     let akimbo = world
         .combat_facts_for(weapon)
@@ -580,14 +631,7 @@ fn grab_number(world: &mut FrameWorld, walker: ClientId, number: i32) {
             next.last_weapon_hand =
                 weapon_iw4::num_hands_for_held(&next.weapons, &next.weapon_data, weapon);
         }
-        add_ammo_on_ps(
-            world,
-            &mut next,
-            weapon,
-            item.clip_r,
-            item.clip_l,
-            item.stock,
-        );
+        add_ammo_on_ps(world, &mut next, weapon, 0, 0, taken);
         if let Some(slot) = world.player_mut(walker) {
             *slot = next;
         }
@@ -655,9 +699,9 @@ fn grab_number(world: &mut FrameWorld, walker: ClientId, number: i32) {
         picker: walker.0 as i32,
         weapon,
         from_entnum: item.state.number,
-        clip_r: item.clip_r,
-        clip_l: item.clip_l,
-        stock: item.stock,
+        clip_r: if already_has { 0 } else { item.clip_r },
+        clip_l: if already_has { 0 } else { item.clip_l },
+        stock: if already_has { taken } else { item.stock },
         swapped_entnum,
         picker_pm_type,
     });
@@ -1088,6 +1132,15 @@ mod dropped_item_tests {
             let newest_seq = frame.dropped_item_by_number(newest).map(|i| i.drop_seq);
             assert_eq!(newest_seq, seqs.last().copied());
         }
+    }
+
+    #[test]
+    fn ammo_is_taken_from_stock_then_the_clips() {
+        assert_eq!(split_item_ammo(30, 20, 0, 40), (30, [20, 0, 10]));
+        assert_eq!(split_item_ammo(50, 20, 5, 40), (50, [10, 5, 0]));
+        assert_eq!(split_item_ammo(100, 20, 0, 40), (60, [0, 0, 0]));
+        assert_eq!(split_item_ammo(0, 20, 0, 40), (0, [20, 0, 40]));
+        assert_eq!(split_item_ammo(-5, 20, 0, 40), (0, [20, 0, 40]));
     }
 
     #[test]
