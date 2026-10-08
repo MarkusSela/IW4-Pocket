@@ -356,8 +356,25 @@ fn settle_items(world: &mut World) {
             })
             .collect()
     };
-    let pickups = FrameWorld::from_world(world).item_pickups_mut().clone();
-    let mut retired = Vec::new();
+    // One notify per item and frame: the woken watchPickup has not re-armed its
+    // waittill yet, so a second trigger on the same item in the same frame would
+    // be lost. A swap wins over an ammo-only touch, since it ends the item.
+    let mut pickups: Vec<crate::ItemPickupRecord> = Vec::new();
+    for pickup in FrameWorld::from_world(world).item_pickups_mut().iter() {
+        match pickups
+            .iter_mut()
+            .find(|seen| seen.from_entnum == pickup.from_entnum)
+        {
+            Some(seen) => {
+                if seen.swapped_entnum == playerstate_iw4::ENTITYNUM_NONE
+                    && pickup.swapped_entnum != playerstate_iw4::ENTITYNUM_NONE
+                {
+                    *seen = *pickup;
+                }
+            }
+            None => pickups.push(*pickup),
+        }
+    }
     for pickup in pickups {
         let Some((object, _, classname)) = items
             .iter()
@@ -382,21 +399,13 @@ fn settle_items(world: &mut World) {
             });
             raise(world, receiver.clone(), "trigger", vec![player, swapped]);
         }
-        // A gun someone only took ammo from is still on the ground, and its
-        // watchPickup thread keeps waiting on it.
-        if FrameWorld::from_world(world)
-            .dropped_item_by_number(pickup.from_entnum)
-            .is_none()
-        {
-            retire(world, object);
-            retired.push(object);
-        }
     }
+    // Retire after every trigger is out: a gun someone only took ammo from is still
+    // on the ground, and its watchPickup thread keeps waiting on it.
     for (object, number, _) in items {
-        if !retired.contains(&object)
-            && FrameWorld::from_world(world)
-                .dropped_item_by_number(number)
-                .is_none()
+        if FrameWorld::from_world(world)
+            .dropped_item_by_number(number)
+            .is_none()
         {
             retire(world, object);
         }
