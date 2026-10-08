@@ -534,7 +534,7 @@ fn prepare_navigation(
 }
 
 fn refresh_nav(world: &SimWorld, nav: &mut BotNav, load: Option<&assets::MapLoadProcess>) -> bool {
-    let digest = world.content_digest();
+    let digest = nav_digest(world);
     if nav.graph.digest == digest && nav.graph.schema == NAV_SCHEMA && nav.graph.hull == NAV_HULL {
         return true;
     }
@@ -581,6 +581,18 @@ fn refresh_nav(world: &SimWorld, nav: &mut BotNav, load: Option<&assets::MapLoad
 
 const NAV_CACHE_KIND: &str = "nav";
 
+/// What the walk reads: clip geometry and spawns (`map`) and script-model
+/// collision (`models`). `content_digest` also folds in the weapon and class
+/// tables, so any gameplay-data change re-keyed every map's graph and sent it
+/// back through a cold walk (12-29 s on the phone) for nothing.
+fn nav_digest(world: &SimWorld) -> u64 {
+    let parts = world.content_components();
+    assets::fnv1a64_more(
+        assets::fnv1a64(&parts.map.to_le_bytes()),
+        &parts.models.to_le_bytes(),
+    )
+}
+
 /// The digest, schema and hull that decide in-memory reuse are the whole key,
 /// so the same map read back from disk is the same graph the walk would bake.
 fn nav_cache_key(digest: u64) -> String {
@@ -623,7 +635,7 @@ fn navigation_for(world: &mut SimWorld, digest: u64) -> NavGraph {
 }
 
 fn bake_navigation(world: &mut SimWorld, graph: &mut NavGraph) {
-    let digest = world.content_digest();
+    let digest = nav_digest(world);
     if graph.digest == digest && graph.schema == NAV_SCHEMA && graph.hull == NAV_HULL {
         return;
     }
