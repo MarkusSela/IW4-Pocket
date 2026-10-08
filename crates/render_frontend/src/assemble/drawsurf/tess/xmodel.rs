@@ -1113,7 +1113,10 @@ fn admitted_mask(
     if !dynents.draws().is_empty() {
         admitted |= ADMIT_DYNENT;
     }
-    if sky.is_some() {
+    // A sky whose surfaces were all refused still has a plan but no draws, and the
+    // full merge leaves it out; marking it admitted made the concat recopy add sky
+    // rows the merge never laid out, which refused the whole xmodel lane.
+    if sky.is_some_and(|(sky, _)| !sky.draws.is_empty()) {
         admitted |= ADMIT_SKY;
     }
     admitted
