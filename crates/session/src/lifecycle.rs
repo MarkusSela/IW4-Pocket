@@ -344,6 +344,7 @@ fn occupy_after_teardown(
             menu.write(ReturnedToMenu {
                 swap_id: pending.id,
                 had_world: pending.tore_down_world,
+                reason: Some(teardown_reason_for(&pending.target)),
             });
             Some(SessionSwapCompletion {
                 id: pending.id,
@@ -427,6 +428,7 @@ fn run_session_swap(
         menu.write(ReturnedToMenu {
             swap_id: fact.request_id,
             had_world,
+            reason: None,
         });
         diag::warn!(
             Sim,

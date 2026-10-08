@@ -8,6 +8,8 @@ use crate::{CommandSpec, ConsoleCommand, ConsoleRegistry};
 
 const PAGE_SIZE: usize = 10;
 const PACK_SLOTS: usize = 16;
+/// Frames to wait for the main menu after a match before reopening the lobby.
+const REOPEN_LOBBY_FRAMES: u16 = 300;
 
 #[derive(Default)]
 pub(crate) struct FrontendState {
@@ -23,6 +25,39 @@ pub(crate) struct FrontendState {
     password_joining: bool,
     lobby_password: String,
     rules_seeded: bool,
+    reopen_lobby: Option<u16>,
+}
+
+/// MW2 sends the host of a private match back to its lobby, setup kept, when the
+/// match scripts end the match. Quitting, a failed load and public lobbies still go
+/// to the main menu.
+fn keeps_private_lobby(
+    match_ended: bool,
+    in_lobby: bool,
+    is_host: bool,
+    public: bool,
+    menus_present: bool,
+) -> bool {
+    match_ended && in_lobby && is_host && !public && menus_present
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum LobbyReopen {
+    Wait,
+    Open,
+    AlreadyOpen,
+}
+
+/// The teardown resets the menu stack to the main menu; the lobby goes on top of it.
+fn lobby_reopen_step(open: &[String]) -> LobbyReopen {
+    let has = |name: &str| open.iter().any(|menu| menu.eq_ignore_ascii_case(name));
+    if !has("iw4l_main") {
+        LobbyReopen::Wait
+    } else if has("game_lobby") {
+        LobbyReopen::AlreadyOpen
+    } else {
+        LobbyReopen::Open
+    }
 }
 
 #[derive(SystemParam)]
@@ -118,15 +153,31 @@ pub(crate) fn route(
     }
     let mut returned_from_world = false;
     let mut returned_in_menu = false;
+    let mut match_ended = true;
     for fact in returned.read() {
         returned_from_world |= fact.had_world;
         returned_in_menu |= !fact.had_world;
+        if fact.had_world {
+            match_ended &= fact.reason == Some(frame::TeardownReason::MatchEnded);
+        }
     }
     if returned_from_world {
         commands.remove_resource::<frame::HostMatchRules>();
         commands.remove_resource::<sim::HostGameModeSelection>();
-        *party = UiPartyState::default();
-        state.public = false;
+        if keeps_private_lobby(
+            match_ended,
+            party.in_lobby,
+            party.is_host,
+            state.public,
+            services.menus.is_some(),
+        ) {
+            state.reopen_lobby = Some(REOPEN_LOBBY_FRAMES);
+            dvars.set("ui_frontend_status", "");
+        } else {
+            state.reopen_lobby = None;
+            *party = UiPartyState::default();
+            state.public = false;
+        }
     } else if returned_in_menu && state.public {
         let reason = match services.bridge.as_ref().map(|bridge| bridge.state()) {
             Some(net::MasterBridgeState::Failed { error, .. }) => format!("{error:?}"),
@@ -141,6 +192,26 @@ pub(crate) fn route(
             menus.write(UiMenuRequest::Close("game_lobby".into()));
         }
         dvars.set("ui_frontend_status", reason);
+    }
+    if let Some(left) = state.reopen_lobby {
+        let step = services
+            .menus
+            .as_ref()
+            .map(|menus| lobby_reopen_step(&menus.open_names()));
+        match step {
+            _ if !party.in_lobby => state.reopen_lobby = None,
+            Some(LobbyReopen::Open) => {
+                menus.write(UiMenuRequest::Open("game_lobby".into()));
+                state.reopen_lobby = None;
+                diag::info!(Ui, "frontend: match ended, private lobby kept");
+            }
+            Some(LobbyReopen::AlreadyOpen) => state.reopen_lobby = None,
+            _ if left == 0 => {
+                state.reopen_lobby = None;
+                *party = UiPartyState::default();
+            }
+            _ => state.reopen_lobby = Some(left - 1),
+        }
     }
     if dvars.get("ui_mapname").is_none()
         && let Some(map) = maps.maps().find(|map| map.starts_with("iw4:"))
@@ -875,4 +946,31 @@ fn map_pages(maps: &ui::MenuMapList) -> Vec<(usize, usize, String)> {
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod lobby_return_tests {
+    use super::*;
+
+    #[test]
+    fn only_a_scripted_end_of_a_private_hosted_match_keeps_the_lobby() {
+        assert!(keeps_private_lobby(true, true, true, false, true));
+        assert!(!keeps_private_lobby(false, true, true, false, true));
+        assert!(!keeps_private_lobby(true, false, true, false, true));
+        assert!(!keeps_private_lobby(true, true, false, false, true));
+        assert!(!keeps_private_lobby(true, true, true, true, true));
+        assert!(!keeps_private_lobby(true, true, true, false, false));
+    }
+
+    #[test]
+    fn the_lobby_opens_once_the_main_menu_is_up() {
+        let open = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
+        assert_eq!(lobby_reopen_step(&open(&[])), LobbyReopen::Wait);
+        assert_eq!(lobby_reopen_step(&open(&["game_lobby"])), LobbyReopen::Wait);
+        assert_eq!(lobby_reopen_step(&open(&["iw4l_main"])), LobbyReopen::Open);
+        assert_eq!(
+            lobby_reopen_step(&open(&["IW4L_MAIN", "game_lobby"])),
+            LobbyReopen::AlreadyOpen
+        );
+    }
 }

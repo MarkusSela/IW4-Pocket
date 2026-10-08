@@ -373,7 +373,9 @@ record is imported or initialized.
 ## Remaining
 
 A live bomb plant/defuse check. Native IW4L menus can create a private lobby,
-select a map/mode, start a match and return to the frontend. Browser/public-lobby
+select a map/mode and start a match. When the match scripts end it (exitLevel), the
+host returns to the same private lobby with map, mode and rules kept; a disconnect or a
+failed load returns to the main menu. Browser/public-lobby
 actions are connected but still need multiplayer validation. Display mode/resolution, brightness, volume, VSync, shadows, depth of field and
 bloom are bound to runtime settings and persisted locally. Surround output, voice/chat
 settings, third-person camera and spectator restrictions remain incomplete. A true

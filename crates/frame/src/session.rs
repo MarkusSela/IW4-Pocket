@@ -228,6 +228,8 @@ pub struct ReturnedToMenu {
     pub swap_id: u64,
 
     pub had_world: bool,
+    /// Why the session left its world; None when a map load failed.
+    pub reason: Option<TeardownReason>,
 }
 
 #[derive(Message, Clone, Debug, PartialEq, Eq)]
