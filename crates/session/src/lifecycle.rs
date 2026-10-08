@@ -450,7 +450,10 @@ fn run_session_swap(
             pending.abort_install = false;
         }
         let expected_teardown = teardown_reason_for(&pending.target);
-        let menu_accepts_replaced = matches!(pending.target, SessionSwapTarget::Menu { .. });
+        // A return to the menu takes whichever teardown the world got: a disconnect in
+        // the frame after exitLevel turns the target into a leave while the teardown
+        // already ran as MatchEnded, and waiting for a Disconnect then never ended.
+        let menu_accepts_any = matches!(pending.target, SessionSwapTarget::Menu { .. });
         match pending.phase {
             SessionSwapPhase::Requested if has_world.is_some_and(|world| world.0) => {
                 teardown.0 = Some(expected_teardown);
@@ -459,10 +462,9 @@ fn run_session_swap(
             }
             SessionSwapPhase::Requested | SessionSwapPhase::WaitingForTeardown
                 if matches!(pending.phase, SessionSwapPhase::Requested)
-                    || torn.read().any(|fact| {
-                        fact.reason == expected_teardown
-                            || (menu_accepts_replaced && fact.reason == TeardownReason::Replaced)
-                    }) =>
+                    || torn
+                        .read()
+                        .any(|fact| fact.reason == expected_teardown || menu_accepts_any) =>
             {
                 finish = occupy_after_teardown(
                     pending,

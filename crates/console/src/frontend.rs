@@ -154,12 +154,14 @@ pub(crate) fn route(
     let mut returned_from_world = false;
     let mut returned_in_menu = false;
     let mut match_ended = true;
+    let mut left_session = false;
     for fact in returned.read() {
         returned_from_world |= fact.had_world;
         returned_in_menu |= !fact.had_world;
         if fact.had_world {
             match_ended &= fact.reason == Some(frame::TeardownReason::MatchEnded);
         }
+        left_session |= fact.reason == Some(frame::TeardownReason::Disconnect);
     }
     if returned_from_world {
         commands.remove_resource::<frame::HostMatchRules>();
@@ -192,6 +194,14 @@ pub(crate) fn route(
             menus.write(UiMenuRequest::Close("game_lobby".into()));
         }
         dvars.set("ui_frontend_status", reason);
+    } else if returned_in_menu && party.in_lobby && party.is_host {
+        if !left_session && services.menus.is_some() {
+            // A private match that failed to load goes back to the lobby too; the
+            // loading screen had closed it.
+            state.reopen_lobby = Some(REOPEN_LOBBY_FRAMES);
+        } else {
+            *party = UiPartyState::default();
+        }
     }
     if let Some(left) = state.reopen_lobby {
         let step = services
@@ -255,6 +265,7 @@ pub(crate) fn route(
                 }
                 "ui_create_lobby" => {
                     selected_game(&dvars, &maps)?;
+                    state.reopen_lobby = None;
                     state.lobby_password.clear();
                     party.active = true;
                     party.in_lobby = true;
@@ -298,6 +309,7 @@ pub(crate) fn route(
                     if !party.in_lobby || !party.is_host {
                         return Err("Only the lobby host can start a match".into());
                     }
+                    state.reopen_lobby = None;
                     let (map, mode) = selected_game(&dvars, &maps)?;
                     commands.insert_resource(host_rules(&dvars));
                     if state.public {
