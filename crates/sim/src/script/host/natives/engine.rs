@@ -7,7 +7,7 @@ use super::math::distance_sq;
 use crate::bullet_collision::{
     MASK_PLAYER_SOLID, MASK_SHOT, PLAYER_MAXS, PLAYER_MINS, TraceOutcome,
 };
-use crate::script::{Arc, ArrayKey, Namespace, NativeRegistry, Runtime, Value};
+use crate::script::{Arc, ArrayKey, BTreeMap, Namespace, NativeRegistry, Resource, Runtime, Value};
 use bevy_ecs::prelude::World;
 
 const ZERO: [f32; 3] = [0.0; 3];
@@ -757,6 +757,7 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
     register_motion(registry);
     register_attachments(registry);
     register_sound_and_fx(registry);
+    register_glass(registry);
     register_entity_state(registry);
     super::super::hud::register(registry);
     register_traces(registry);
@@ -2008,6 +2009,65 @@ fn register_level(registry: &mut NativeRegistry) {
     unavailable!("no script match-data upload service is connected": "sendmatchdata", "sendclientmatchdata");
     unavailable!("IW4 lobby termination is not bound to the IW4L lobby lifecycle": "endlobby");
     unavailable!("IW4 party termination is not bound to the IW4L party lifecycle": "endparty");
+}
+
+/// The map's named glass, installed with the world (`SimWorld::set_glass_names`).
+#[derive(Resource, Default)]
+pub struct GlassNames(pub BTreeMap<String, Vec<u32>>);
+
+fn glass_named(world: &World, name: &str) -> Vec<u32> {
+    world
+        .get_resource::<GlassNames>()
+        .and_then(|names| names.0.get(name))
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn glass_id(args: &[Value], index: usize) -> Result<u32, String> {
+    u32::try_from(int(args, index)?).map_err(|_| "glass id must not be negative".into())
+}
+
+// mp_strike breaks its "brokenglass01" panes in main(); without these the whole
+// program was refused at install (unbound natives) and the map never loaded.
+fn register_glass(registry: &mut NativeRegistry) {
+    use Namespace::Function;
+
+    registry.register(Function, "getglassarray", |world, _, args| {
+        let name = string(args, 0)?;
+        let ids = glass_named(world, &name)
+            .into_iter()
+            .map(|id| Value::Int(id as i32))
+            .collect();
+        new_array(world, ids)
+    });
+    registry.register(Function, "getglass", |world, _, args| {
+        let name = string(args, 0)?;
+        Ok(glass_named(world, &name)
+            .first()
+            .map_or(Value::Undefined, |&id| Value::Int(id as i32)))
+    });
+    registry.register(Function, "destroyglass", |world, _, args| {
+        let id = glass_id(args, 0)?;
+        let now = i32::try_from(super::super::players::now_ms(world)).unwrap_or(i32::MAX);
+        crate::frame::FrameWorld::from_world(world)
+            .world_objects_mut()
+            .script_destroy_glass(id, now);
+        Ok(Value::Undefined)
+    });
+    registry.register(Function, "isglassdestroyed", |world, _, args| {
+        let id = glass_id(args, 0)?;
+        let solid = crate::frame::FrameWorld::from_world(world)
+            .world_objects()
+            .glass_is_solid(id);
+        Ok(Value::Int(i32::from(!solid)))
+    });
+    registry.register(Function, "getglassorigin", |world, _, args| {
+        let id = glass_id(args, 0)?;
+        Ok(crate::frame::FrameWorld::from_world(world)
+            .world_objects()
+            .glass_pane(id)
+            .map_or(Value::Undefined, |pane| Value::Vector(pane.origin)))
+    });
 }
 
 fn register_weapon_facts(registry: &mut NativeRegistry) {

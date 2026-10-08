@@ -176,6 +176,17 @@ impl SimWorld {
         crate::script::set_dvar(&mut self.ecs, name, value);
     }
 
+    /// The map's named glass (targetname → piece ids) for getglassarray / getglass.
+    /// Install it before the map script runs: mp_strike breaks its glass in main().
+    pub fn set_glass_names(&mut self, names: Vec<(String, Vec<u32>)>) {
+        if !names.is_empty() {
+            let pieces: usize = names.iter().map(|(_, pieces)| pieces.len()).sum();
+            diag::info!(Sim, "glass: {} named sets, {pieces} pieces", names.len());
+        }
+        self.ecs
+            .insert_resource(crate::script::GlassNames(names.into_iter().collect()));
+    }
+
     pub fn gsc_realm(&self) -> Option<crate::script::Realm> {
         self.ecs
             .resource::<crate::script::Runtime>()

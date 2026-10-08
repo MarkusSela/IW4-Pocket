@@ -539,11 +539,8 @@ pub fn apply_prepared_match(
         for (name, value) in &script_dvars {
             sim.set_gsc_dvar(name, value);
         }
-        for entry in script_entries {
-            sim.start_gsc(&entry, sim::script::Value::level(), Vec::new())
-                .map_err(|e| script_refusal(&zone, gametype, "entry", &e))?;
-        }
-        let load_hold = AuthorityLoadHold(true);
+        // The glass goes in before the map script runs: mp_strike destroys its
+        // named panes from main().
         if let Some(glass) = scene.fx_glass.as_ref() {
             let panes = (0..glass.piece_places.len())
                 .filter_map(|i| {
@@ -559,7 +556,24 @@ pub fn apply_prepared_match(
                 })
                 .collect();
             sim.world_objects_mut().install_glass_panes(panes);
+            sim.set_glass_names(
+                glass
+                    .names
+                    .iter()
+                    .map(|(name, pieces)| {
+                        (
+                            name.clone(),
+                            pieces.iter().copied().map(u32::from).collect(),
+                        )
+                    })
+                    .collect(),
+            );
         }
+        for entry in script_entries {
+            sim.start_gsc(&entry, sim::script::Value::level(), Vec::new())
+                .map_err(|e| script_refusal(&zone, gametype, "entry", &e))?;
+        }
+        let load_hold = AuthorityLoadHold(true);
         sim.world_objects_mut()
             .set_map_round_epoch(load_key.match_key.match_epoch);
         spawn_script_model_movers(&mut sim, &model_spawns);

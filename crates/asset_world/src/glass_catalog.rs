@@ -152,6 +152,10 @@ pub struct FxGlassReset {
     pub piece_limit: usize,
 
     pub geo_data_limit: usize,
+
+    /// The map's named glass (`G_GlassName`): a targetname and its piece indices,
+    /// for the scripts' getglassarray / getglass.
+    pub names: Vec<(String, Vec<u16>)>,
 }
 
 impl FxGlassReset {
@@ -263,7 +267,35 @@ pub fn build_fx_glass_reset(stream: &ZoneStream<'_>) -> Option<FxGlassReset> {
         geo_cursor,
         piece_limit: g.piece_limit,
         geo_data_limit: g.geo_data_limit,
+        names: glass_names(stream),
     })
+}
+
+/// Each `G_GlassName` row: name string, script string, piece count, piece indices.
+fn glass_names(s: &ZoneStream<'_>) -> Vec<(String, Vec<u16>)> {
+    let Some(g) = s.glass_data() else {
+        return Vec::new();
+    };
+    let Some(rows) = g.names else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(g.name_count);
+    for i in 0..g.name_count {
+        let row = rows.at(i * s.layout(sz::G_GLASS_NAME, 24));
+        let Some(name) = cstr_field(s, row, 0).filter(|name| !name.is_empty()) else {
+            continue;
+        };
+        let count = s.u16_at(row, s.layout(6, 10)).unwrap_or(0) as usize;
+        let pieces = match s.ptr_at(row, s.layout(8, 16)) {
+            Ok(ZonePtr::Offset(q)) => {
+                let q = s.resolve_alias(q);
+                (0..count).map_while(|n| s.u16_at(q, n * 2).ok()).collect()
+            }
+            _ => Vec::new(),
+        };
+        out.push((name, pieces));
+    }
+    out
 }
 
 fn glass_material_edge(
