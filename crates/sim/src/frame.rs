@@ -103,6 +103,15 @@ impl FrameWorld<'_> {
         Some(&mut self.ecs.get_mut::<ProjectileRow>(entity)?.into_inner().0)
     }
 
+    /// Removes a projectile that ends without an event (cleanup, script removal) and
+    /// frees its entity slot. A detonation keeps the slot for its event instead
+    /// (`note_dying_missile`).
+    pub(crate) fn despawn_projectile(&mut self, entnum: i32) -> Option<ProjectileState> {
+        let projectile = self.remove_projectile_by_number(entnum)?;
+        self.free_dynamic_entity_number(projectile.entnum);
+        Some(projectile)
+    }
+
     pub(crate) fn remove_projectile_by_number(&mut self, entnum: i32) -> Option<ProjectileState> {
         let entity = entity_by_number(self.ecs, entnum)?;
         let projectile = self.ecs.get::<ProjectileRow>(entity)?.0;

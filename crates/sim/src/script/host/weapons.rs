@@ -438,7 +438,7 @@ fn settle_projectiles(world: &mut World, notes: &[WeaponNote]) {
                 .find(|p| p.id == id)
                 .map(|p| p.entnum)
             {
-                FrameWorld::from_world(world).remove_projectile_by_number(number);
+                FrameWorld::from_world(world).despawn_projectile(number);
             }
             continue;
         };

@@ -639,7 +639,7 @@ pub(crate) fn think_projectile(world: &mut FrameWorld, tick: Tick, entnum: i32) 
             .detonate_at_ms
             .is_none_or(|deadline| deadline > projectile.cleanup_at_ms || !projectile.live)
     {
-        let _ = world.remove_projectile_by_number(entnum);
+        let _ = world.despawn_projectile(entnum);
         return;
     }
     let facts = required_projectile_facts(world, projectile.weapon);
@@ -914,7 +914,7 @@ pub(crate) fn think_projectile(world: &mut FrameWorld, tick: Tick, entnum: i32) 
     };
     match tick_outcome {
         TickOutcome::Cleanup => {
-            let _ = world.remove_projectile_by_number(entnum);
+            let _ = world.despawn_projectile(entnum);
             return;
         }
         TickOutcome::Fuse => {
