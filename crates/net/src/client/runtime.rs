@@ -881,11 +881,19 @@ pub fn sample_client_input(
         .and_then(|snapshot| snapshot.meta.for_client(local.0))
         .and_then(|meta| meta.location_selection.as_ref())
         .map(|selection| selection.choose_direction);
-    let location_mouse = choose_direction.is_some().then(|| {
+    let location_input = choose_direction.is_some().then(|| {
         let mouse = (actions.mouse_x, actions.mouse_y);
+        let pad = LocationPad::capture(&actions);
         actions.mouse_x = 0.0;
         actions.mouse_y = 0.0;
-        mouse
+        // The sticks move the map cursor; the hidden player must not turn or
+        // walk with them meanwhile.
+        actions.pad_look_delta = [0.0; 2];
+        actions.pad_move = [0.0; 2];
+        actions.pad_turn_rate = [0.0; 2];
+        actions.pad_lockon = None;
+        actions.pad_autoaim = None;
+        (mouse, pad)
     });
     let remote_mouse = presented
         .snapshot()
@@ -1094,8 +1102,8 @@ pub fn sample_client_input(
             cmd.off_hand_index = loadout.tactical as u16;
         }
     }
-    match location_mouse {
-        Some((mouse_x, mouse_y)) => {
+    match location_input {
+        Some(((mouse_x, mouse_y), pad)) => {
             let held = cmd.buttons;
             let directing =
                 choose_direction == Some(true) && held & playerstate_iw4::buttons::ADS != 0;
@@ -1104,7 +1112,15 @@ pub fn sample_client_input(
             } else {
                 playerstate_iw4::buttons::ADS | playerstate_iw4::buttons::MELEE_CHARGE
             };
-            cmd.selected_location = cursor.step(&actions, mouse_x, mouse_y, directing);
+            cmd.selected_location = cursor.step(
+                &actions,
+                mouse_x,
+                mouse_y,
+                pad,
+                cls.frametime_secs(),
+                choose_direction == Some(true),
+                directing,
+            );
             if choose_direction != Some(true) {
                 cmd.selected_location[2] = 0;
             }
@@ -1223,16 +1239,66 @@ impl Default for LocationCursor {
 
 const LOCATION_CURSOR_SPEED: f32 = 0.6;
 
+/// Map widths per second at full stick deflection.
+const LOCATION_PAD_SPEED: f32 = 0.6;
+
+/// How far the right stick must be pushed before it points the direction.
+const LOCATION_PAD_AIM_DEFLECTION: f32 = 0.5;
+
+/// The sticks as they were before the map cursor took them from the player.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct LocationPad {
+    /// Forward and right.
+    mv: [f32; 2],
+    /// Right and up. Up is map-up whatever the look inversion.
+    look: [f32; 2],
+    look_deflection: f32,
+}
+
+impl LocationPad {
+    fn capture(input: &ClientActionInput) -> Self {
+        let up = if input.pad_invert {
+            -input.pad_look[1]
+        } else {
+            input.pad_look[1]
+        };
+        Self {
+            mv: input.pad_move,
+            look: [input.pad_look[0], up],
+            look_deflection: input.pad_deflection,
+        }
+    }
+}
+
 impl LocationCursor {
+    #[allow(clippy::too_many_arguments)]
     fn step(
         &mut self,
         input: &ClientActionInput,
         mouse_x: f32,
         mouse_y: f32,
+        pad: LocationPad,
+        dt: f32,
+        choose_direction: bool,
         directing: bool,
     ) -> [u8; 3] {
         let scale = LOCATION_CURSOR_SPEED * input.sensitivity * 0.002;
-        let moved = [mouse_x * scale, mouse_y * scale];
+        // A controller moves the cursor with the left stick, or with either
+        // stick when there is no direction to point. Map y grows downwards.
+        let further = |a: f32, b: f32| if a.abs() >= b.abs() { a } else { b };
+        let (right, up) = if choose_direction {
+            (pad.mv[1], pad.mv[0])
+        } else {
+            (
+                further(pad.look[0], pad.mv[1]),
+                further(pad.look[1], pad.mv[0]),
+            )
+        };
+        let pad_step = LOCATION_PAD_SPEED * dt.clamp(0.0, 0.1);
+        let moved = [
+            mouse_x * scale + right * pad_step,
+            mouse_y * scale - up * pad_step,
+        ];
         self.directing = directing;
         if directing {
             self.aim = [
@@ -1249,10 +1315,79 @@ impl LocationCursor {
                 (self.at[1] + moved[1]).clamp(0.0, 1.0),
             ];
             self.aim = self.at;
+            // The right stick points the direction, as on a console.
+            if choose_direction
+                && pad.look_deflection >= LOCATION_PAD_AIM_DEFLECTION
+                && (pad.look[0] != 0.0 || pad.look[1] != 0.0)
+            {
+                self.yaw = (-pad.look[0])
+                    .atan2(pad.look[1])
+                    .to_degrees()
+                    .rem_euclid(360.0);
+            }
         }
         let byte = |v: f32| ((v * 255.0 - 128.0).round() as i32).clamp(-128, 127) as i8 as u8;
         let yaw = (self.yaw * (256.0 / 360.0)).round() as i32 as u8;
         [byte(self.at[0]), byte(self.at[1]), yaw]
+    }
+}
+
+#[cfg(test)]
+mod location_cursor_tests {
+    use super::*;
+
+    fn pad(mv: [f32; 2], look: [f32; 2], invert: bool) -> LocationPad {
+        let input = ClientActionInput {
+            pad_move: mv,
+            pad_look: look,
+            pad_deflection: (look[0] * look[0] + look[1] * look[1]).sqrt(),
+            pad_invert: invert,
+            ..ClientActionInput::default()
+        };
+        LocationPad::capture(&input)
+    }
+
+    fn run(cursor: &mut LocationCursor, pad: LocationPad, choose_direction: bool, frames: u32) {
+        let input = ClientActionInput::default();
+        for _ in 0..frames {
+            cursor.step(&input, 0.0, 0.0, pad, 1.0 / 60.0, choose_direction, false);
+        }
+    }
+
+    #[test]
+    fn left_stick_moves_the_cursor_and_clamps_at_the_edge() {
+        let mut cursor = LocationCursor::default();
+        run(&mut cursor, pad([1.0, 0.0], [0.0; 2], false), true, 120);
+        assert_eq!(cursor.at, [0.5, 0.0]);
+        let mut cursor = LocationCursor::default();
+        run(&mut cursor, pad([0.0, 1.0], [0.0; 2], false), true, 10);
+        assert!(cursor.at[0] > 0.5 && cursor.at[1] == 0.5);
+    }
+
+    #[test]
+    fn right_stick_points_the_direction_without_moving_the_cursor() {
+        let mut cursor = LocationCursor::default();
+        run(&mut cursor, pad([0.0; 2], [1.0, 0.0], false), true, 1);
+        assert_eq!(cursor.at, [0.5, 0.5]);
+        assert!((cursor.yaw - 270.0).abs() < 0.01, "yaw {}", cursor.yaw);
+        run(&mut cursor, pad([0.0; 2], [0.0, 1.0], false), true, 1);
+        assert!(cursor.yaw.abs() < 0.01, "yaw {}", cursor.yaw);
+    }
+
+    #[test]
+    fn either_stick_moves_the_cursor_without_a_direction() {
+        let mut cursor = LocationCursor::default();
+        run(&mut cursor, pad([0.0; 2], [0.0, 1.0], false), false, 10);
+        assert!(cursor.at[1] < 0.5 && cursor.at[0] == 0.5);
+        assert_eq!(cursor.yaw, 0.0);
+    }
+
+    #[test]
+    fn inverted_look_still_moves_the_cursor_map_up() {
+        // pad_look arrives already inverted: stick up reads as down.
+        let mut cursor = LocationCursor::default();
+        run(&mut cursor, pad([0.0; 2], [0.0, -1.0], true), false, 10);
+        assert!(cursor.at[1] < 0.5);
     }
 }
 
