@@ -696,7 +696,7 @@ pub struct RenderFrameDiag {
 }
 
 macro_rules! stage_timer {
-    ($timer:ident, $start:ident, $end:ident, $field:ident) => {
+    ($timer:ident, $start:ident, $end:ident, $field:ident $(, then $also:path)?) => {
         #[derive(Resource, Default)]
         struct $timer(Option<Instant>);
 
@@ -709,6 +709,7 @@ macro_rules! stage_timer {
                 return;
             };
             let ms = started.elapsed().as_secs_f32() * 1000.0;
+            $($also(ms);)?
             if let Ok(mut guard) = slot.0.lock() {
                 guard.$field = Some(ms);
             }
@@ -764,11 +765,13 @@ stage_timer!(
     specialize_stage_end,
     specialize_ms
 );
+// Every frame's drawable wait also goes to the frame pacing stats.
 stage_timer!(
     PrepareViewsStageTimer,
     prepare_views_stage_start,
     prepare_views_stage_end,
-    prepare_views_ms
+    prepare_views_ms,
+    then super::frame_pacing::note_drawable_wait
 );
 stage_timer!(
     QueueStageTimer,

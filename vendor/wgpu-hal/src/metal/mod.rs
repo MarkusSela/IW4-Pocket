@@ -131,6 +131,32 @@ impl OsFeatures {
     }
 }
 
+/// Present pacing and on-screen timing hooks for the IW4 Pocket iOS build (not
+/// upstream). Both are read on every `Queue::present`; left at their defaults
+/// (0 and unset) the present is the upstream `presentDrawable:` call.
+pub mod pacing {
+    use core::sync::atomic::AtomicU32;
+    use std::sync::OnceLock;
+
+    /// Minimum time, in microseconds, the previous drawable stays on screen
+    /// before this one may replace it, passed to
+    /// `presentDrawable:afterMinimumDuration:`. 0 = plain `presentDrawable:`.
+    pub static MIN_PRESENT_US: AtomicU32 = AtomicU32::new(0);
+
+    /// Called for every drawable presented without a transaction.
+    pub struct Hooks {
+        /// On the presenting thread, after `commit`: the drawable's
+        /// `drawableID` and the nanoseconds spent presenting and committing.
+        pub submitted: fn(drawable_id: u64, present_call_ns: u64),
+        /// From Metal's presented handler, on any thread: `presentedTime` in
+        /// host seconds, 0.0 when the drawable was never shown.
+        pub presented: fn(drawable_id: u64, presented_host_s: f64),
+    }
+
+    /// Unset: no presented handler is added and nothing is timed.
+    pub static HOOKS: OnceLock<Hooks> = OnceLock::new();
+}
+
 pub struct Instance {}
 
 impl Instance {
@@ -611,12 +637,55 @@ impl crate::Queue for Queue {
             let command_buffer = self.shared.raw.commandBuffer().unwrap();
             command_buffer.setLabel(Some(ns_string!("(wgpu internal) Present")));
 
+            // IW4 Pocket: optional timing hooks and a minimum on-screen
+            // duration (see `pacing`). Neither is set by default, which keeps
+            // the upstream `presentDrawable:` path.
+            let hooks = pacing::HOOKS.get();
+            let mut submitted = None;
+
             // https://developer.apple.com/documentation/quartzcore/cametallayer/1478157-presentswithtransaction?language=objc
             if !texture.present_with_transaction {
-                command_buffer.presentDrawable(&texture.drawable);
+                if let Some(hooks) = hooks {
+                    let id = texture.drawable.drawableID() as u64;
+                    let presented = hooks.presented;
+                    let block = block2::RcBlock::new(
+                        move |drawable: NonNull<ProtocolObject<dyn MTLDrawable>>| {
+                            // `presentedTime` is typed only behind objc2-metal's
+                            // "objc2-core-foundation" feature, which is off.
+                            let at: f64 =
+                                unsafe { objc2::msg_send![drawable.as_ref(), presentedTime] };
+                            presented(id, at);
+                        },
+                    );
+                    unsafe {
+                        texture
+                            .drawable
+                            .addPresentedHandler(block2::RcBlock::as_ptr(&block))
+                    };
+                    submitted = Some((hooks.submitted, id, std::time::Instant::now()));
+                }
+                let min_us = pacing::MIN_PRESENT_US.load(atomic::Ordering::Relaxed);
+                if min_us == 0 {
+                    command_buffer.presentDrawable(&texture.drawable);
+                } else {
+                    // Untyped for the same reason: the typed binding takes a
+                    // CFTimeInterval, also behind that feature.
+                    let seconds = f64::from(min_us) * 1e-6;
+                    let _: () = unsafe {
+                        objc2::msg_send![
+                            &*command_buffer,
+                            presentDrawable: &*texture.drawable,
+                            afterMinimumDuration: seconds
+                        ]
+                    };
+                }
             }
 
             command_buffer.commit();
+
+            if let Some((hook, id, started)) = submitted {
+                hook(id, started.elapsed().as_nanos() as u64);
+            }
 
             if texture.present_with_transaction {
                 command_buffer.waitUntilScheduled();

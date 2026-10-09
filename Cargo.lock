@@ -2044,6 +2044,7 @@ dependencies = [
  "sha2",
  "sim",
  "ui",
+ "wgpu-hal",
 ]
 
 [[package]]

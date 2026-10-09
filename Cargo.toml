@@ -6,7 +6,11 @@ quinn-proto = { git = "https://github.com/quinn-rs/quinn", rev = "f650e0f213b01e
 # wgpu-hal 29 only reports BC texture compression on macOS. vendor/wgpu-hal is
 # 29.0.4 with the iOS detection from gfx-rs/wgpu#9656 (one change in
 # src/metal/adapter.rs), by treuenten, so iOS GPUs that sample BC can keep textures
-# compressed instead of expanding them to RGBA8. Remove once on wgpu 30+.
+# compressed instead of expanding them to RGBA8. It also carries the iOS frame
+# pacing hook (`metal::pacing` in src/metal/mod.rs: presentDrawable
+# afterMinimumDuration and presented-time callbacks, both off unless
+# crates/bootstrap/src/frame_pace.rs sets them). Remove once on wgpu 30+, after
+# re-applying the pacing hook there.
 wgpu-hal = { path = "vendor/wgpu-hal" }
 
 [workspace]

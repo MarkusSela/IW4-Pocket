@@ -51,6 +51,8 @@ pub fn add_runtime_plugins_with_role(app: &mut App, role: RuntimeRole) {
     crate::promotion::register(app);
     // iOS: no auto-lock while a map loads or a match runs.
     crate::idle_timer::register(app);
+    // iOS present pacing, dt snap and frame timing stats; nothing elsewhere.
+    crate::frame_pace::register(app);
     // Render setup can finish after Startup, so watch for the resource.
     app.add_systems(
         First,

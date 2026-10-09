@@ -1,5 +1,6 @@
 mod alloc_count;
 pub mod exit;
+pub mod frame_pacing;
 pub mod gap;
 pub mod memtrack;
 pub mod asset_heap;

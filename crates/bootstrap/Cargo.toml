@@ -52,6 +52,9 @@ libc = "0.2"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSObject"] }
 objc2-game-controller = "0.3"
+# The frame pacing hook (`metal::pacing`) in vendor/wgpu-hal, through
+# [patch.crates-io]; bevy does not re-export the hal. Same features wgpu enables.
+wgpu-hal = { version = "29.0.4", default-features = false, features = ["metal"] }
 
 [lints]
 workspace = true
