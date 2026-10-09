@@ -467,6 +467,7 @@ fn exec_cell_scene_ent_cmds(
         .map(|s| s.frustum_planes.clone())
         .unwrap_or_default();
     let mut pending: Vec<DpvsEntWorkerCmd> = Vec::new();
+    let mut visits: Vec<(&[[f32; 4]], &[[f32; 4]])> = Vec::new();
     let cull = world.as_ref().and_then(|w| w.cull.as_ref());
     let dpvs = cull.map(|cull| DpvsPlanes {
         planes: &cull.dpvs.planes,
@@ -495,17 +496,31 @@ fn exec_cell_scene_ent_cmds(
 
             scene.scene_ent_walked = true;
             let bit_count = scene_ent_cell_walk_bits(GFX_CFG_ENT_COUNT);
-            let cell_planes: Vec<[f32; 4]> = stats
+            // Each portal that reached this cell clips it differently. An
+            // entity is visible when it is inside any of those regions.
+            let cell_planes: &[[f32; 4]] = stats
                 .as_ref()
                 .and_then(|s| {
                     s.cell_clips
                         .get(cell)
                         .filter(|c| c.plane_count > 0)
-                        .map(|c| c.as_slice().to_vec())
+                        .map(|c| c.as_slice())
                 })
-                .unwrap_or_else(|| planes.clone());
-            let sphere_planes =
-                scene_ent_inner_planes(&cell_planes, cmd.plane_begin, cmd.plane_count);
+                .unwrap_or(&planes);
+            visits.clear();
+            visits.push((
+                cell_planes,
+                scene_ent_inner_planes(cell_planes, cmd.plane_begin, cmd.plane_count),
+            ));
+            if let Some(s) = stats.as_ref() {
+                for clip in s.later_cell_clips(cell) {
+                    let all = clip.as_slice();
+                    visits.push((
+                        all,
+                        scene_ent_inner_planes(all, clip.frustum_plane_count, clip.plane_count),
+                    ));
+                }
+            }
             for (second_pass, row) in [(false, row0), (true, row1)] {
                 for entnum in msb_iter(row, bit_count) {
                     let id = entnum as u32;
@@ -522,7 +537,10 @@ fn exec_cell_scene_ent_cmds(
                         let Some(bounds) = bits.ent_info.get(entnum).copied().flatten() else {
                             continue;
                         };
-                        if dpvs_iw4::scene_ent_frustum_hides(bounds, sphere_planes) {
+                        if visits
+                            .iter()
+                            .all(|(_, inner)| dpvs_iw4::scene_ent_frustum_hides(bounds, inner))
+                        {
                             continue;
                         }
                         scene.mark_scene_ent_visible(id);
@@ -539,10 +557,10 @@ fn exec_cell_scene_ent_cmds(
                             });
                             continue;
                         };
-                        if dpvs_iw4::scene_ent_sphere_hides(dobj.origin, radius, sphere_planes) {
-                            continue;
-                        }
-                        if dpvs_iw4::scene_ent_frustum_hides(bounds, &cell_planes) {
+                        if visits.iter().all(|(all, inner)| {
+                            dpvs_iw4::scene_ent_sphere_hides(dobj.origin, radius, inner)
+                                || dpvs_iw4::scene_ent_frustum_hides(bounds, all)
+                        }) {
                             continue;
                         }
                         if dpvs_iw4::scene_ent_needs_bound_worker(dobj.cull_gate) {
@@ -576,7 +594,9 @@ fn exec_cell_scene_ent_cmds(
                     let origin = model.origin;
                     let radius = model.radius.unwrap_or(0.0);
                     if model.radius.is_some()
-                        && dpvs_iw4::scene_ent_sphere_hides(origin, radius, sphere_planes)
+                        && visits.iter().all(|(_, inner)| {
+                            dpvs_iw4::scene_ent_sphere_hides(origin, radius, inner)
+                        })
                     {
                         continue;
                     }

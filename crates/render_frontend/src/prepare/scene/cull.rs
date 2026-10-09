@@ -89,7 +89,23 @@ pub struct DpvsFrameStats {
 
     pub cell_clips: Vec<CellClipPlanes>,
 
+    /// Clip planes of each later portal visit to a cell, sorted by cell.
+    pub cell_clips_later: Vec<(u16, CellClipPlanes)>,
+
     pub cell_vis_all: bool,
+}
+
+impl DpvsFrameStats {
+    /// Clip planes of the later portal visits to `cell`.
+    #[must_use]
+    pub fn later_cell_clips(&self, cell: usize) -> impl Iterator<Item = &CellClipPlanes> {
+        let later = &self.cell_clips_later;
+        let start = later.partition_point(|(c, _)| usize::from(*c) < cell);
+        later[start..]
+            .iter()
+            .take_while(move |(c, _)| usize::from(*c) == cell)
+            .map(|(_, clip)| clip)
+    }
 }
 
 const DRAW_DECALS: bool = true;
@@ -146,6 +162,7 @@ pub fn apply_dpvs_cull(
     stats.cell_vis.clear();
     stats.cell_vis_count = 0;
     stats.cell_clips.clear();
+    stats.cell_clips_later.clear();
     stats.cell_vis_all = false;
     stats.view_prepared = 0;
     stats.lock_pvs = 0;
@@ -210,6 +227,7 @@ pub fn apply_dpvs_cull(
 
         Some(cell) => {
             let mut cell_clips = vec![CellClipPlanes::EMPTY; dpvs.cell_count];
+            let mut later_clips = std::mem::take(&mut stats.cell_clips_later);
             let bevels = lock_pvs.dpvs_portal_bevels(&prepared);
             walk_stats = visit_cells(
                 &graph,
@@ -221,9 +239,12 @@ pub fn apply_dpvs_cull(
                 &mut vis,
                 &mut scratch,
                 Some(&mut cell_clips),
+                Some(&mut |cell, clip| later_clips.push((cell, *clip))),
                 bevels.as_ref(),
             );
             stats.cell_clips = cell_clips;
+            later_clips.sort_by_key(|(cell, _)| *cell);
+            stats.cell_clips_later = later_clips;
         }
 
         None => {

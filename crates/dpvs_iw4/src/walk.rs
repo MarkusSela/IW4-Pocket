@@ -312,6 +312,7 @@ pub fn visit_cells(
     out: &mut VisBits<'_>,
     scratch: &mut WalkScratch,
     mut cell_clips: Option<&mut [CellClipPlanes]>,
+    mut later_clips: Option<&mut dyn FnMut(u16, &CellClipPlanes)>,
     bevels: Option<&PortalBevels>,
 ) -> WalkStats {
     let mut stats = WalkStats::default();
@@ -383,6 +384,12 @@ pub fn visit_cells(
                     record_cell_clip(&item, clip_planes, slot);
                 }
             }
+        } else if let Some(later) = later_clips.as_mut() {
+            // A cell reached again through another portal sees a different
+            // slice of it. Its entities are culled against every slice.
+            let mut slot = CellClipPlanes::EMPTY;
+            record_cell_clip(&item, clip_planes, &mut slot);
+            later(item.cell, &slot);
         }
         let cell_planes = queued_clip_planes(&item, clip_planes);
         let Some(edges) = graph.portals.get(cell).copied() else {
