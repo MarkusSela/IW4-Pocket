@@ -448,7 +448,9 @@ fn request_named(
 ) {
     let keys = clip_keys_for_alias(bank, ns, alias);
     if keys.is_empty() {
-        set.missing.insert(alias.to_owned());
+        if !bank.alias_is_null(ns, alias) {
+            set.missing.insert(alias.to_owned());
+        }
     } else {
         set.resolved_aliases += 1;
     }
