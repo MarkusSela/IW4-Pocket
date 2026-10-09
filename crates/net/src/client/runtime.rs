@@ -896,6 +896,9 @@ pub fn sample_client_input(
             let mouse = (actions.mouse_x, actions.mouse_y);
             actions.mouse_x = 0.0;
             actions.mouse_y = 0.0;
+            // The sticks steer the missile as well; the hidden player's view
+            // must not turn with them meanwhile.
+            actions.pad_look_delta = [0.0; 2];
             mouse
         });
     let look_state = ps

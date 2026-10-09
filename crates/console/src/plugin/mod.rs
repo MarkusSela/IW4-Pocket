@@ -445,6 +445,7 @@ fn publish_client_action_input(
         physical.look_ready = false;
     } else {
         out.pad_sensitivity = settings.pad_look_sensitivity();
+        out.pad_invert = settings.pad_invert;
         out.pad_ads_sensitivity = settings.pad_ads_sensitivity;
         out.pad_acceleration = settings.pad_acceleration;
         if let Some(pad) = pad {
