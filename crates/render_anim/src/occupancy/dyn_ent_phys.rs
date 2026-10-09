@@ -19,6 +19,8 @@ const CONTENTS_SOLID: u32 = 1;
 const SLEEP_SPEED: f32 = 4.0;
 const GROUND_NZ: f32 = 0.7;
 const CONTACT_SLOP: f32 = 0.125;
+/// Highest a stuck body is lifted in one step.
+const UNSTICK_MAX_LIFT: f32 = 16.0;
 const SLEEP_MS: i32 = 200;
 
 #[derive(Resource, Clone, Default)]
@@ -209,7 +211,28 @@ fn integrate_body(body: &mut DynEntPhysBody, clip: &ClipCollision, dt: f32) {
         } else {
             1.0
         };
-        body.origin.z += lift;
+        // Lift out of a floor only to a spot that is clear, probing doubling
+        // heights up to UNSTICK_MAX_LIFT. A body sunk a little into a floor or
+        // resting on a slope is freed. One that overlaps a wall or roof is
+        // still inside after any lift (and is re-woken whenever the player
+        // walks past), so it stays where it was placed and sleeps.
+        let mut dz = lift + CONTACT_SLOP;
+        let cap = dz.max(UNSTICK_MAX_LIFT);
+        while dz <= cap {
+            let lifted = body.origin + Vec3::Z * dz;
+            let probe = clip.sweep_box(
+                lifted.to_array(),
+                lifted.to_array(),
+                body.mins,
+                body.maxs,
+                CONTENTS_SOLID,
+            );
+            if !probe.startsolid && !probe.allsolid {
+                body.origin = lifted;
+                break;
+            }
+            dz *= 2.0;
+        }
         return;
     }
     if hit.fraction < 1.0 {
