@@ -1,7 +1,15 @@
-<p align="center">
-  <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4"><img src="media/demo.gif" width="720" alt="IW4 Pocket demo"></a>
-  <br><sub>▶️ <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4">Ver la demo completa</a> · 18 s, iPhone 13 Pro Max</sub>
-</p>
+<table align="center">
+<tr>
+<td align="center" width="50%">
+<a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4"><img src="media/demo.gif" alt="IW4 Pocket demo"></a>
+<br><sub>▶️ <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4">Ver la demo completa</a> · 18 s, iPhone 13 Pro Max</sub>
+</td>
+<td align="center" width="50%">
+<a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/treuenten_tes-0.2.1.mov"><img src="media/treuenten.gif" alt="IW4 Pocket match on iPhone 17 Pro Max"></a>
+<br><sub>▶️ <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/treuenten_tes-0.2.1.mov">Ver la demo completa</a> · una partida en iPhone 17 Pro Max, de treuenten</sub>
+</td>
+</tr>
+</table>
 
 <p align="center">
   <img src="media/icon.png" width="110" alt="IW4 Pocket icon">
@@ -69,7 +77,7 @@ Ejecuta el workflow **ios-release** desde la pestaña Actions (runner macOS) e i
 
 ## ⚖️ Créditos y aviso legal
 
-Port de [IW4L](https://github.com/vladtrc/iw4L) de vladtrc y colaboradores (Apache-2.0, ver `LICENSE`, `NOTICE`; README original en `README.upstream.md`). Correcciones de memoria y texturas BC: [treuenten](https://github.com/treuenten) ([issue #1](https://github.com/MarkusSela/IW4-Pocket/issues/1)).
+Port de [IW4L](https://github.com/vladtrc/iw4L) de vladtrc y colaboradores (Apache-2.0, ver `LICENSE`, `NOTICE`; README original en `README.upstream.md`). Correcciones de memoria, texturas BC, gestión de fotogramas y correcciones del motor: [treuenten](https://github.com/treuenten) ([issue #1](https://github.com/MarkusSela/IW4-Pocket/issues/1)).
 
 > Proyecto no oficial, sin afiliación con Activision, Infinity Ward, Apple ni los autores de IW4L. Call of Duty y Modern Warfare son marcas de sus propietarios. Necesitas una copia legítima del juego.
 

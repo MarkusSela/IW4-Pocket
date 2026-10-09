@@ -231,21 +231,32 @@ pub(crate) fn frame_latency() -> u32 {
     // iOS renders on the main thread (no pipelined rendering), so with one
     // frame in flight (two drawables) it waits on nextDrawable every frame and
     // snaps to 30/20/15 fps. Two frames in flight let CPU and GPU overlap.
-    const DEFAULT: u32 = if cfg!(target_os = "ios") { 2 } else { 1 };
+    //
+    // IW4 Pocket: the second frame in flight costs graphics memory that has not been
+    // measured on a 3 GB grant, so the Low device tier keeps one frame (what every
+    // earlier build ran) and Mid/High take two. `IW4L_FRAME_LATENCY=2` in
+    // `iw4l-env.txt` tries two on a Low phone without a rebuild.
+    let default: u32 = if cfg!(target_os = "ios")
+        && diag::memory_settings::get().tier != diag::memory_settings::Tier::Low
+    {
+        2
+    } else {
+        1
+    };
     static FRAMES: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
     *FRAMES.get_or_init(|| {
         let Some(asked) = std::env::var_os(FRAME_LATENCY_ENV) else {
-            return DEFAULT;
+            return default;
         };
         match asked.to_str().map(str::trim).and_then(|v| v.parse().ok()) {
             Some(frames) if frames > 0 => frames,
             _ => {
                 diag::warn!(
                     Launch,
-                    "{FRAME_LATENCY_ENV}={} is not a frame count; using {DEFAULT}",
+                    "{FRAME_LATENCY_ENV}={} is not a frame count; using {default}",
                     asked.to_string_lossy(),
                 );
-                DEFAULT
+                default
             }
         }
     })

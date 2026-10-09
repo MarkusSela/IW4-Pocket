@@ -15,9 +15,21 @@ support on Apple9+ GPUs: authored by treuenten (JohnM),
 https://github.com/MarkusSela/IW4-Pocket/issues/1 — imported with git cherry-pick -x,
 original authorship kept in the commit history.
 
+Frame timing (two frames in flight, no MSAA on UI cameras, 120 Hz display request,
+screen kept awake, on-screen frame statistics and optional present pacing, opt-in
+pipelined rendering) and 25 engine fixes (culling, physics, controller steering for
+the Predator and killstreak map, menus, lobby return, dropped weapons, glass natives,
+lighting slots, navigation cache key, sky model, sound slots, spark fountains):
+authored by treuenten (JohnM), https://github.com/MarkusSela/IW4-Pocket/issues/1 —
+imported with git cherry-pick -x, original authorship kept. One of them (slide down
+steep slopes) is IW4L commit 32f7b39 by neptune (NeptuneTheGoat), cherry-picked
+unchanged. Several commits were written with Claude and are co-authored as such.
+
 vendor/wgpu-hal is wgpu-hal 29.0.4 (MIT OR Apache-2.0, licences included in that
-directory) with ONE modified file, src/metal/adapter.rs (6 lines, marked in the file),
-backported from gfx-rs/wgpu#9656.
+directory) with TWO modified files, both marked in the source: src/metal/adapter.rs
+(6 lines, backported from gfx-rs/wgpu#9656) and src/metal/mod.rs (71 lines, the
+`pacing` module: optional present timing hooks and presentDrawable:afterMinimumDuration,
+both off unless the app sets them).
 
 
 --------------------------------------------------------------------------------

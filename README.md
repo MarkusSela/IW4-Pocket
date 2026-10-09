@@ -1,7 +1,15 @@
-<p align="center">
-  <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4"><img src="media/demo.gif" width="720" alt="IW4 Pocket demo"></a>
-  <br><sub>▶️ <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4">Watch the full demo</a> · 18 s, iPhone 13 Pro Max</sub>
-</p>
+<table align="center">
+<tr>
+<td align="center" width="50%">
+<a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4"><img src="media/demo.gif" alt="IW4 Pocket demo"></a>
+<br><sub>▶️ <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4">Watch the full demo</a> · 18 s, iPhone 13 Pro Max</sub>
+</td>
+<td align="center" width="50%">
+<a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/treuenten_tes-0.2.1.mov"><img src="media/treuenten.gif" alt="IW4 Pocket match on iPhone 17 Pro Max"></a>
+<br><sub>▶️ <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/treuenten_tes-0.2.1.mov">Watch the full demo</a> · a match on iPhone 17 Pro Max, by treuenten</sub>
+</td>
+</tr>
+</table>
 
 <p align="center">
   <img src="media/icon.png" width="110" alt="IW4 Pocket icon">
@@ -69,7 +77,7 @@ Run the **ios-release** workflow from the Actions tab (macOS runner) and give it
 
 ## ⚖️ Credits and legal
 
-Port of [IW4L](https://github.com/vladtrc/iw4L) by vladtrc and contributors (Apache-2.0, see `LICENSE`, `NOTICE`; original README in `README.upstream.md`). Memory fixes and BC textures: [treuenten](https://github.com/treuenten) ([issue #1](https://github.com/MarkusSela/IW4-Pocket/issues/1)).
+Port of [IW4L](https://github.com/vladtrc/iw4L) by vladtrc and contributors (Apache-2.0, see `LICENSE`, `NOTICE`; original README in `README.upstream.md`). Memory fixes, BC textures, frame timing and engine fixes: [treuenten](https://github.com/treuenten) ([issue #1](https://github.com/MarkusSela/IW4-Pocket/issues/1)).
 
 > Unofficial fan project, not affiliated with Activision, Infinity Ward, Apple or the IW4L authors. Call of Duty and Modern Warfare are trademarks of their owners. You must own a legitimate copy of the game.
 
