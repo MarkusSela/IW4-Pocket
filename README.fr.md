@@ -1,12 +1,10 @@
 <table align="center">
 <tr>
 <td align="center" width="50%">
-<a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4"><img src="media/demo.gif" alt="IW4 Pocket demo"></a>
-<br><sub>▶️ <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/demo.mp4">Voir la démo complète</a> · 18 s, iPhone 13 Pro Max</sub>
+<img src="media/demo.gif" alt="IW4 Pocket demo, iPhone 13 Pro Max">
 </td>
 <td align="center" width="50%">
-<a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/treuenten_tes-0.2.1.mov"><img src="media/treuenten.gif" alt="IW4 Pocket match on iPhone 17 Pro Max"></a>
-<br><sub>▶️ <a href="https://github.com/MarkusSela/IW4-Pocket/blob/main/media/treuenten_tes-0.2.1.mov">Voir la démo complète</a> · une partie sur iPhone 17 Pro Max, par treuenten</sub>
+<img src="media/treuenten.gif" alt="IW4 Pocket match, iPhone 17 Pro Max, by treuenten">
 </td>
 </tr>
 </table>
