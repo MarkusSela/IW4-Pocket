@@ -15,6 +15,7 @@ mod postfx;
 mod postfx_dof;
 mod products;
 mod resolved_scene;
+pub mod scene_split;
 pub(crate) mod scene_depth;
 mod script_grade;
 mod shadowmap_spot_gpu;

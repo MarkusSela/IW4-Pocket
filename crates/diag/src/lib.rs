@@ -1,4 +1,6 @@
 mod alloc_count;
+pub mod detail;
+pub mod events;
 pub mod exit;
 pub mod frame_pacing;
 pub mod gap;
@@ -356,6 +358,11 @@ pub fn write_event(
     ev: Option<&str>,
     fields: Option<&serde_json::Value>,
 ) {
+    // The one classifier: asked before any key, copy or crumb is built.
+    if !detail::admits_at(detail::detail(), lvl, msg) {
+        detail::note_suppressed();
+        return;
+    }
     #[cfg(target_os = "ios")]
     if lvl <= Level::Info && !ios_env::is_log_noise(msg) {
         let short: String = msg.chars().take(300).collect();
@@ -394,6 +401,30 @@ pub fn write_event(
     state.last_key = Some(key);
     state.last_count = 1;
     emit_raw(&mut state, ch, lvl, msg, None, ev, fields, false);
+}
+
+/// Same as [`write_event`] for a line that has not been formatted yet. In Normal
+/// detail a high-frequency line is recognised from its first few characters and dropped
+/// without formatting the rest (the arguments are only borrowed, never rendered).
+pub fn write_event_args(
+    ch: Channel,
+    lvl: Level,
+    args: std::fmt::Arguments<'_>,
+    ev: Option<&str>,
+) {
+    if lvl > Level::Warn && !detail::detailed() {
+        let mut head = detail::Head::default();
+        // An Err only means the head is full, which is all the classifier needs.
+        let _ = std::fmt::write(&mut head, args);
+        if detail::classify(head.as_str()) == detail::EventClass::HighFrequency {
+            detail::note_suppressed();
+            return;
+        }
+    }
+    match args.as_str() {
+        Some(text) => write_event(ch, lvl, text, ev, None),
+        None => write_event(ch, lvl, &args.to_string(), ev, None),
+    }
 }
 
 pub fn flush() {
@@ -505,11 +536,10 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! info {
     ($ch:ident, $($arg:tt)*) => {{
-        $crate::write_event(
+        $crate::write_event_args(
             $crate::Channel::$ch,
             $crate::Level::Info,
-            &format!($($arg)*),
-            None,
+            format_args!($($arg)*),
             None,
         );
     }};
@@ -518,11 +548,10 @@ macro_rules! info {
 #[macro_export]
 macro_rules! debug {
     ($ch:ident, $($arg:tt)*) => {{
-        $crate::write_event(
+        $crate::write_event_args(
             $crate::Channel::$ch,
             $crate::Level::Debug,
-            &format!($($arg)*),
-            None,
+            format_args!($($arg)*),
             None,
         );
     }};
@@ -531,12 +560,11 @@ macro_rules! debug {
 #[macro_export]
 macro_rules! event {
     ($ch:ident, $lvl:ident, $ev:literal, $($arg:tt)*) => {{
-        $crate::write_event(
+        $crate::write_event_args(
             $crate::Channel::$ch,
             $crate::Level::$lvl,
-            &format!($($arg)*),
+            format_args!($($arg)*),
             Some($ev),
-            None,
         );
     }};
 }

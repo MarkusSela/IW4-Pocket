@@ -3201,8 +3201,14 @@ fn submit_exact_draw_run<'a>(
     let viewport = extracted_view.viewport;
     let vp_x = viewport.x as f32;
     let vp_y = viewport.y as f32;
-    let vp_w = viewport.z as f32;
-    let vp_h = viewport.w as f32;
+    // 3D/UI separation: draw the scene into the top-left scene-size area.
+    let scene_area = if viewport.x == 0 && viewport.y == 0 {
+        super::scene_split::effective_scene_size(UVec2::new(viewport.z, viewport.w))
+    } else {
+        UVec2::new(viewport.z, viewport.w)
+    };
+    let vp_w = scene_area.x as f32;
+    let vp_h = scene_area.y as f32;
 
     for draw in draws {
         let Some(gpu_pipeline) = registry.ready(draw.pipeline) else {

@@ -978,7 +978,9 @@ pub(crate) fn update_command_context_code_sources(
             camera.physical_viewport_rect(),
         )
     {
-        let size = vp.size();
+        // 3D/UI separation: the scene constants describe the 3D-size area.
+        let rt = render_gpu::effective_scene_size(rt);
+        let size = vp.size().min(rt);
         if let (Ok(rt_w), Ok(rt_h), Ok(x), Ok(y), Ok(w), Ok(h)) = (
             i32::try_from(rt.x),
             i32::try_from(rt.y),

@@ -7,6 +7,8 @@ mod observation;
 mod plugin;
 mod query;
 mod roster;
+#[cfg(test)]
+mod roster_contract_tests;
 mod sensor;
 mod task;
 pub mod unique_loadout;
@@ -24,15 +26,15 @@ pub use observation::{
     ObjectiveAction, SelfState, Stance, TeamRole, Visibility, WeaponAction, WeaponClass,
     WeaponFacts, WeaponSlot,
 };
-pub use plugin::{BotWanted, BotsPlugin, UI_MAX_BOTS};
+pub use plugin::{BotWanted, BotsPlugin};
 pub use query::{
     Budgeted, HullTrace, ObstacleKind, QueryCounters, QueryDenied, QueryResult, QuerySubsystem,
     SightSample, TraceBudget, WalkSample, WorldQuery,
 };
-pub use roster::lobby_bot_names;
+pub use roster::{bot_room_for, lobby_bot_names, reset_lobby_names};
 pub use roster::{
     BotAddQueue, BotAddRequest, BotFireQueue, BotHold, BotRoster, BotTpQueue, BotTpRequest,
-    BotTpTarget, BotTpWhere, MAX_HOST_BOTS,
+    BotTpTarget, BotTpWhere, MAX_HOST_BOTS, MAX_PARTICIPANTS,
 };
 pub use sensor::{observe, observe_focused};
 pub use task::{ActionStage, Decision, SwitchReason, Task, TaskKind};

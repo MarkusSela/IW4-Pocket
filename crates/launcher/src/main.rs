@@ -76,7 +76,7 @@ fn spawn_memory_logger() {
             // Every 250 ms, so the peak and the least headroom are not missed between lines.
             diag::session::note_sample(
                 footprint,
-                diag::ios_env::available_bytes().unwrap_or(0) / (1024 * 1024),
+                diag::ios_env::available_bytes().map(|b| b / (1024 * 1024)),
             );
             // Close to the limit the steps shrink, so the lines before a silent kill
             // show how fast memory was climbing (a 40 MiB step hid the last seconds).
@@ -129,8 +129,8 @@ fn install_signal_logging() {
     }
 }
 
-/// Release name shown small in the main menu (the Cargo version is `0.3.7-beta.2`).
-const APP_LABEL: &str = "0.3.7c";
+/// Release name shown small in the main menu (the Cargo version is `0.3.8`).
+const APP_LABEL: &str = "0.3.8";
 
 fn main() {
     #[cfg(target_os = "ios")]

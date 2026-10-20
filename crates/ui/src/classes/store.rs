@@ -153,6 +153,15 @@ pub(crate) fn sync_host_class_loadouts(
         return;
     }
     host.slots = store.slots.iter().map(HostClassSlot::from).collect();
+    // Caricamento selettivo: le classi selezionabili del giocatore devono essere nella
+    // closure PRIMA della chiave del common set (slot bloccati = non scegliibili, esclusi).
+    let usable: Vec<HostClassSlot> = store
+        .slots
+        .iter()
+        .filter(|slot| slot.lock_reason.is_none())
+        .map(HostClassSlot::from)
+        .collect();
+    assets::selective_weapons::declare_host_classes(&usable);
 }
 
 const CLASS_FILE_HEADER: &str = "iw4l-classes 1";

@@ -45,8 +45,10 @@ pub(crate) fn stamp_prepared_scene_view(
     if aspect < 1e-3 {
         aspect = 16.0 / 9.0;
     }
+    // 3D/UI separation: the scene is projected and drawn at the 3D size.
     let (rt_w, rt_h) = camera
         .physical_target_size()
+        .map(render_gpu::effective_scene_size)
         .and_then(|rt| i32::try_from(rt.x).ok().zip(i32::try_from(rt.y).ok()))
         .unwrap_or((0, 0));
     let scene_viewport = hud_iw4::subwindow_to_viewport(
@@ -74,6 +76,10 @@ pub(crate) fn stamp_prepared_scene_view(
             physical_size: UVec2::new(scene_viewport.width as u32, scene_viewport.height as u32),
             depth: 0.0..1.0,
         });
+    }
+    if render_gpu::scene_size_override().is_some() {
+        // The final window scissor uses camera.viewport: keep it full.
+        camera.viewport = None;
     }
 
     camera.clear_color = match map_fog

@@ -3,7 +3,17 @@ use sim::{ClientId, LifeSequence};
 
 use crate::controller::HostController;
 
-pub const MAX_HOST_BOTS: u32 = 20;
+/// Most participants in one lobby or match, humans and bots together. This is the only
+/// capacity limit; the lobby, the menus and the roster all derive theirs from it.
+pub const MAX_PARTICIPANTS: u32 = 18;
+
+/// Most bots a match can hold: at least one human is always playing.
+pub const MAX_HOST_BOTS: u32 = MAX_PARTICIPANTS - 1;
+
+/// Bots that fit in a lobby holding `humans` people; the host always counts as one.
+pub fn bot_room_for(humans: u32) -> u32 {
+    MAX_PARTICIPANTS.saturating_sub(humans.max(1))
+}
 
 const BOT_NAMES: &[&str] = &[
     "xXsn1perXx",
@@ -263,47 +273,35 @@ fn draw_names() -> Vec<&'static str> {
         .collect()
 }
 
-struct Draw {
-    /// The bot count this order was drawn for; a different count draws again.
-    count: u32,
-    order: Vec<&'static str>,
-}
+/// The random name order of the current lobby, drawn on first use. Bot `n` takes the
+/// `n`-th name, so changing the count never renames the bots that stay.
+static DRAW: std::sync::Mutex<Option<Vec<&'static str>>> = std::sync::Mutex::new(None);
 
-static DRAW: std::sync::Mutex<Option<Draw>> = std::sync::Mutex::new(None);
-
-fn lock_draw() -> std::sync::MutexGuard<'static, Option<Draw>> {
+fn lock_draw() -> std::sync::MutexGuard<'static, Option<Vec<&'static str>>> {
     DRAW.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// The names the lobby shows for `count` bots. Adding or removing a bot draws a new
-/// random order; the same count keeps the same names (lobby refresh, map load), and the
+/// The names the lobby shows for `count` bots. They are a prefix of one order drawn per
+/// lobby: adding or removing a bot, a lobby refresh or a map load keep the names, and the
 /// match then takes exactly these names.
 pub fn lobby_bot_names(count: u32) -> Vec<&'static str> {
-    let mut guard = lock_draw();
-    let stale = guard.as_ref().is_none_or(|draw| draw.count != count);
-    if stale {
-        *guard = Some(Draw {
-            count,
-            order: draw_names(),
-        });
-    }
-    let draw = guard.as_ref().expect("draw was just made");
-    (0..count as usize)
-        .map(|i| draw.order[i % draw.order.len()])
+    lock_draw()
+        .get_or_insert_with(draw_names)
+        .iter()
+        .copied()
+        .take(count as usize)
         .collect()
+}
+
+/// Forget the current order; the next lobby draws its own. Only a new lobby calls this.
+pub fn reset_lobby_names() {
+    *lock_draw() = None;
 }
 
 /// The current order, drawn on first use. Bots added in a match (also by console
 /// command) follow it without redrawing it.
 fn match_names() -> Vec<&'static str> {
-    let mut guard = lock_draw();
-    guard
-        .get_or_insert_with(|| Draw {
-            count: 0,
-            order: draw_names(),
-        })
-        .order
-        .clone()
+    lock_draw().get_or_insert_with(draw_names).clone()
 }
 
 #[derive(Resource, Debug, Default)]
@@ -423,13 +421,42 @@ impl BotRoster {
         self.bots.iter().any(|bot| bot.id == id)
     }
 
+    /// Distinct ids holding a slot: `taken` (humans and reserved connections, which may
+    /// repeat and may already include joined bots) plus the bots of this roster.
+    pub fn occupied(&self, taken: &[ClientId]) -> u32 {
+        let ids: std::collections::HashSet<ClientId> = taken
+            .iter()
+            .copied()
+            .chain(self.bots.iter().map(|bot| bot.id))
+            .collect();
+        ids.len() as u32
+    }
+
+    /// Bots that still fit next to everyone already holding a slot.
+    pub fn room(&self, taken: &[ClientId]) -> u32 {
+        MAX_PARTICIPANTS.saturating_sub(self.occupied(taken))
+    }
+
     // `taken` are the ids real clients already own. A bot minted onto one of
     // them *is* that client as far as the roster is concerned: `is_bot` claims
     // the player, and the slot is dead weight because no system can drive an
     // id someone else is already playing.
     pub fn add_bots(&mut self, count: u32, taken: &[ClientId], dummy: bool) -> Vec<ClientId> {
-        let room = MAX_HOST_BOTS.saturating_sub(self.bots.len() as u32);
-        let count = count.min(room);
+        self.add_bots_named(count, taken, dummy, &match_names())
+    }
+
+    /// `add_bots` with an explicit name order. Each new bot takes the first name no
+    /// present bot uses, so earlier bots keep theirs.
+    pub(crate) fn add_bots_named(
+        &mut self,
+        count: u32,
+        taken: &[ClientId],
+        dummy: bool,
+        names: &[&'static str],
+    ) -> Vec<ClientId> {
+        // Capped by the free slots at this moment, so requests made in one frame share
+        // the same limit: each one sees the bots the previous one added.
+        let count = count.min(self.room(taken));
         let seed = self.seed;
         let mut added = Vec::with_capacity(count as usize);
         for i in 0..count {
@@ -445,9 +472,9 @@ impl BotRoster {
             }
             let brain = (!dummy)
                 .then(|| HostController::new(seed ^ (u64::from(id.0) << 32) ^ u64::from(i)));
-            // Same order as the lobby draw, skipping bots already present.
-            let name = match_names()
-                .into_iter()
+            let name = names
+                .iter()
+                .copied()
                 .find(|name| !self.bots.iter().any(|bot| bot.name == *name))
                 .unwrap_or("bot");
             self.bots.push(BotSlot {
@@ -558,16 +585,16 @@ mod name_tests {
     }
 
     #[test]
-    fn lobby_names_are_redrawn_when_the_count_changes() {
+    fn lobby_names_survive_count_changes_and_match_creation() {
         // One test body: the draw is shared state and tests run in parallel.
         let five = lobby_bot_names(5);
         assert_eq!(five, lobby_bot_names(5), "same count must stay stable");
         let six = lobby_bot_names(6);
         assert_eq!(six.len(), 6);
         assert_eq!(six, lobby_bot_names(6));
-        assert_ne!(six[..5], five[..], "adding a bot must draw a new order");
+        assert_eq!(six[..5], five[..], "adding a bot must preserve existing names");
         let four = lobby_bot_names(4);
-        assert_ne!(four[..], six[..4], "removing a bot must draw a new order");
+        assert_eq!(four[..], six[..4], "removing a bot must preserve existing names");
 
         // The match takes exactly the names the lobby showed for this count.
         let shown = lobby_bot_names(MAX_HOST_BOTS);
@@ -579,5 +606,23 @@ mod name_tests {
             shown
         );
         assert_eq!(shown, lobby_bot_names(MAX_HOST_BOTS));
+
+        // Only an explicit reset (a new lobby) draws a new order.
+        reset_lobby_names();
+        assert_ne!(lobby_bot_names(MAX_HOST_BOTS), shown);
+    }
+
+    #[test]
+    fn a_full_lobby_has_unique_names_within_the_protocol_limit() {
+        let names = draw_names();
+        let shown: Vec<_> = names.iter().take(MAX_PARTICIPANTS as usize).collect();
+        let unique: std::collections::HashSet<_> = shown.iter().collect();
+        assert_eq!(unique.len(), shown.len());
+        for name in shown {
+            assert!(name.is_ascii() && name.len() <= BOT_NAME_BYTES, "{name}");
+            let packed = entity_iw4::pack_client_state_name(name);
+            assert_eq!(&packed[..name.len()], name.as_bytes());
+            assert_eq!(packed[name.len()], 0);
+        }
     }
 }

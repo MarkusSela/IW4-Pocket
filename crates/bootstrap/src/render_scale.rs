@@ -8,6 +8,22 @@
 //! shrink by that factor on each side; Core Animation stretches the result over
 //! the screen. Window sizes in points, and with them the menus and the HUD
 //! layout, stay as they were.
+//!
+//! # 3D / UI separation ("Nitidezza testo/UI") - STATE: WIRED (explicit Native/High/Medium and 3D scale < 0.6 only)
+//! `text_sharpness::select` returns the 3D size and the UI size; they differ
+//! only for an explicit mode with 3D scale < 0.6 (Auto/Off: same, as before).
+//! The window takes the UI size, `render_gpu::set_scene_size_override` the 3D
+//! size: colour pass viewport, projection and 2D command-buffer constants use
+//! it, `scene_split::blit_scene` upscales it before post-fx / HUD. Notes:
+//! - 3D size: colour pass viewport (`render_gpu/.../colour_submit/mod.rs`
+//!   `extracted_view.viewport`), `view_parms.rs` `rt_w/rt_h` + camera.viewport
+//!   in `render_frontend/src/prepare/scene/view_parms.rs`, scene depth
+//!   (`scene_depth.rs:51`), a `MainPassResolutionOverride` on the Camera3d.
+//! - UI size (full window): HUD / `draw_iw_tess` (`iw_tess.rs:436-467`),
+//!   `Hud2dSurface` (`hud/src/surface.rs`), postfx/shellshock
+//!   (`main_texture().size()`), and the scene must be upscaled into the whole
+//!   main texture before the HUD pass (`ResolvedScene::copy` copies 1:1, it
+//!   does not scale).
 use bevy::prelude::*;
 
 pub(crate) fn register(app: &mut App) {
@@ -23,6 +39,8 @@ mod ios {
     use bevy::prelude::*;
     use bevy::window::PrimaryWindow;
     use winit::platform::ios::WindowExtIOS;
+
+    use crate::text_sharpness::{select, SharpnessMode};
 
     const RENDER_SCALE_ENV: &str = "IW4L_RENDER_SCALE";
 
@@ -74,19 +92,46 @@ mod ios {
                 .current_monitor()
                 .map_or_else(|| winit.scale_factor(), |monitor| monitor.scale_factor());
             let before = winit.outer_size();
-            winit.set_scale_factor(native * pending.0);
-            Some((native, before, winit.outer_size()))
+            // The window (swapchain, HUD, text) takes the UI scale; the 3D scale
+            // is carried in `TextSharpness` for the scene consumers (see the
+            // report: view_parms rt_w/rt_h, Hud2dSurface, scene_depth, postfx).
+            let sel = select(
+                SharpnessMode::from_env(),
+                (before.width, before.height),
+                pending.0,
+            );
+            winit.set_scale_factor(native * sel.ui_scale);
+            Some((native, before, winit.outer_size(), sel))
         });
         // The winit window comes a frame or two after the entity.
-        let Some((native, before, after)) = applied else {
+        let Some((native, before, after, sel)) = applied else {
             return;
         };
         commands.remove_resource::<PendingRenderScale>();
+        // Separation active only when the 3D area is smaller than the window.
+        if sel.scene_size != sel.ui_size {
+            render_gpu::set_scene_size_override(Some(UVec2::new(
+                sel.scene_size.0,
+                sel.scene_size.1,
+            )));
+        } else {
+            render_gpu::set_scene_size_override(None);
+        }
+        commands.insert_resource(sel);
+        diag::info!(
+            Launch,
+            "render 3D {}x{} | UI {}x{} | text scale {:.2}",
+            sel.scene_size.0,
+            sel.scene_size.1,
+            sel.ui_size.0,
+            sel.ui_size.1,
+            sel.ui_scale
+        );
         diag::info!(
             Launch,
             "render scale: {:.2} (content scale {native:.2} -> {:.2}), window {}x{} -> {}x{}",
             pending.0,
-            native * pending.0,
+            native * sel.ui_scale,
             before.width,
             before.height,
             after.width,

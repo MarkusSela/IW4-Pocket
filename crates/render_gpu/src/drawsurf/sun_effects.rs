@@ -550,6 +550,7 @@ pub(super) fn register(app: &mut App) {
             draw_sun_effects
                 .in_set(Core3dSystems::PostProcess)
                 .after(tonemapping)
+                .after(super::scene_split::SceneBlitSet)
                 .before(PostFxSet),
         );
 }

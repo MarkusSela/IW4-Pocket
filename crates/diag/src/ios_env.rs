@@ -214,6 +214,9 @@ pub fn apply_env_file(path: &std::path::Path) -> Vec<String> {
         unsafe { std::env::set_var(name, value) };
         applied.push(format!("{name}={value}"));
     }
+    // IW4L_DIAG may just have been set: read it now, not on the first log line.
+    crate::detail::reload_from_env();
+    applied.push(crate::detail::config_line());
     applied
 }
 
@@ -271,12 +274,7 @@ pub fn rotate_log(path: &std::path::Path) {
 
 /// True for lines that bury the useful ones (the menu catalog logs one per material).
 pub fn is_log_noise(message: &str) -> bool {
-    message.starts_with("menu catalog: material ")
-        || message.starts_with("menu catalog: UI image ")
-        || message.starts_with("hud: namespace tree ")
-        || message.starts_with("destructible death ")
-        || message.starts_with("world report: destructible death ")
-        || message.starts_with("static model mesh: ")
+    crate::detail::classify(message) == crate::detail::EventClass::Noise
 }
 
 /// Replaces the per-install app folder (it contains a unique install id) with

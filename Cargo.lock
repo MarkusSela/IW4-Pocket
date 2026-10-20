@@ -3903,7 +3903,7 @@ version = "0.1.0"
 
 [[package]]
 name = "launcher"
-version = "0.3.7-beta.2"
+version = "0.3.8"
 dependencies = [
  "asset_transport",
  "bootstrap",
@@ -5443,6 +5443,7 @@ dependencies = [
  "render_anim",
  "render_frame",
  "render_fx",
+ "render_gpu",
  "render_material",
  "render_scene",
  "sim",

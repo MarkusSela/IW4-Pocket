@@ -554,7 +554,7 @@ pub fn decode_in_zone_builtin_images(catalog: &mut MaterialDefinitions) -> usize
         let (storage, payload, out_w, out_h, levels) = {
             let mut mips = mips;
             let packed = std::mem::take(&mut mips.packed);
-            ios_fit_for_gpu(&mips, packed)
+            ios_fit_for_gpu(&mips, packed, image_role_of(name))
         };
         #[cfg(not(target_os = "ios"))]
         let (storage, payload, out_w, out_h, levels) =
@@ -628,6 +628,65 @@ struct WrapRecipe {
     alpha_test_color: bool,
     force_linear: bool,
     use_srgb_reads: bool,
+    /// Font atlases skip the texture cap; the role comes from the font capture.
+    role: ImageRole,
+}
+
+/// What an image is for. Decided at capture time (a font's material names its
+/// atlas), never guessed from a file name.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ImageRole {
+    #[default]
+    Normal,
+    /// Glyph atlas of a font: exempt from the texture cap (normal and emergency).
+    FontAtlas,
+}
+
+static FONT_ATLASES: std::sync::RwLock<Option<HashSet<String>>> = std::sync::RwLock::new(None);
+static GPU_MAX_DIM: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(8192);
+
+/// Records that the image `name` is a font atlas (called from the font capture).
+pub fn register_font_atlas(name: &str) {
+    let key = crate::AssetRef::bare_name(name).to_ascii_lowercase();
+    if key.is_empty() {
+        return;
+    }
+    FONT_ATLASES
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(HashSet::new)
+        .insert(key);
+}
+
+/// Role the font capture gave to the image called `name`.
+pub fn image_role_of(name: &str) -> ImageRole {
+    let key = crate::AssetRef::bare_name(name).to_ascii_lowercase();
+    let guard = FONT_ATLASES.read().unwrap_or_else(|e| e.into_inner());
+    if guard.as_ref().is_some_and(|set| set.contains(&key)) {
+        ImageRole::FontAtlas
+    } else {
+        ImageRole::Normal
+    }
+}
+
+/// Largest texture side the GPU accepts. Call once the render device exists.
+/// NOTE: no caller yet (the real device limit is not reachable from bootstrap
+/// settings); the default 8192 stays. The registry is filled when the menu
+/// catalog is built, so an atlas decoded before that is still capped as Normal.
+pub fn set_gpu_max_texture_dimension(max: u32) {
+    if max >= 64 {
+        GPU_MAX_DIM.store(max, Ordering::Relaxed);
+    }
+}
+
+/// Texture side limit for `role`: a font atlas is held only by the GPU limit,
+/// whatever the (normal or emergency) cap `base_cap` says.
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+fn texture_cap_for(role: ImageRole, base_cap: u32, gpu_max: u32) -> u32 {
+    match role {
+        ImageRole::Normal => base_cap.min(gpu_max),
+        ImageRole::FontAtlas => gpu_max,
+    }
 }
 
 impl WrapRecipe {
@@ -641,6 +700,7 @@ impl WrapRecipe {
             alpha_test_color,
             force_linear,
             use_srgb_reads: source.use_srgb_reads,
+            role: image_role_of(source.name.as_str()),
         }
     }
 
@@ -901,7 +961,8 @@ fn variant_of(
         | u32::from(is_normal) << 8
         | u32::from(alpha_test_color) << 9
         | u32::from(force_linear) << 10
-        | u32::from(source.use_srgb_reads) << 11;
+        | u32::from(source.use_srgb_reads) << 11
+        | u32::from(image_role_of(source.name.as_str()) == ImageRole::FontAtlas) << 12;
     Some(ImageVariantId { payload, usage })
 }
 
@@ -1064,7 +1125,7 @@ fn wrap_payload(payload: &PreparedPayload, wrap: WrapRecipe) -> Arc<Image> {
 /// caller could afford.
 fn wrap_mips(mips: &DecodedMips, data: Vec<u8>, wrap: WrapRecipe) -> Image {
     #[cfg(target_os = "ios")]
-    let (storage, data, out_w, out_h, levels) = ios_fit_for_gpu(mips, data);
+    let (storage, data, out_w, out_h, levels) = ios_fit_for_gpu(mips, data, wrap.role);
     #[cfg(not(target_os = "ios"))]
     let (storage, out_w, out_h, levels) = (mips.storage, mips.width, mips.height, mips.level_count());
     let format = DecodedMips::texture_format(storage, wrap.linear());
@@ -1896,6 +1957,7 @@ pub fn decode_iwi_texture(
         alpha_test_color: false,
         force_linear: false,
         use_srgb_reads,
+        role: ImageRole::Normal,
     };
     let data = mips.packed.clone();
     Ok(wrap_mips(&mips, data, wrap))
@@ -1913,6 +1975,7 @@ pub fn decode_iwi_texture_t6_folded(
         alpha_test_color: false,
         force_linear: false,
         use_srgb_reads: true,
+        role: ImageRole::Normal,
     };
     let (block_bytes, color_offset, format) = match mips.storage {
         MipStorage::Bc1 => (8, 0, PixelFormat::Bc1),
@@ -2135,6 +2198,7 @@ pub fn decode_iwi_texture_native(
         alpha_test_color: false,
         force_linear: !use_srgb_reads,
         use_srgb_reads,
+        role: ImageRole::Normal,
     };
     let data = mips.packed.clone();
     Ok(wrap_mips(&mips, data, wrap))
@@ -2179,6 +2243,7 @@ pub fn solid_texture(rgba: [u8; 4], srgb: bool) -> Image {
         alpha_test_color: false,
         force_linear: !srgb,
         use_srgb_reads: srgb,
+        role: ImageRole::Normal,
     };
     wrap_mips(&mips, rgba.to_vec(), wrap)
 }
@@ -2654,9 +2719,36 @@ pub struct PayloadRetention {
 mod memory_tests {
     use super::*;
 
+    #[test]
+    fn font_atlas_ignores_cap_and_emergency_cap() {
+        assert_eq!(texture_cap_for(ImageRole::FontAtlas, 128, 8192), 8192);
+        assert_eq!(texture_cap_for(ImageRole::FontAtlas, 64, 8192), 8192);
+    }
+
+    #[test]
+    fn normal_image_is_capped_as_before() {
+        assert_eq!(texture_cap_for(ImageRole::Normal, 128, 8192), 128);
+        assert_eq!(texture_cap_for(ImageRole::Normal, 1024, 8192), 1024);
+    }
+
+    #[test]
+    fn gpu_limit_is_respected_for_both_roles() {
+        assert_eq!(texture_cap_for(ImageRole::FontAtlas, 128, 4096), 4096);
+        assert_eq!(texture_cap_for(ImageRole::Normal, 16384, 4096), 4096);
+    }
+
+    #[test]
+    fn role_is_part_of_the_recipe_and_registry() {
+        let font = WrapRecipe { role: ImageRole::FontAtlas, ..recipe() };
+        assert_ne!(font, recipe());
+        register_font_atlas("Unit_Test_Atlas_Role.iwi");
+        assert_eq!(image_role_of("unit_test_atlas_role.iwi"), ImageRole::FontAtlas);
+        assert_eq!(image_role_of("unit_test_other_image"), ImageRole::Normal);
+    }
+
     fn recipe() -> WrapRecipe {
         WrapRecipe { sampler_state: 0, is_normal: false, alpha_test_color: false,
-            force_linear: false, use_srgb_reads: true }
+            force_linear: false, use_srgb_reads: true, role: ImageRole::Normal }
     }
 
     fn batch(payload: Arc<PreparedPayload>) -> DecodedImageBatch {
@@ -3631,8 +3723,13 @@ fn gpu_bc() -> bool {
 
 /// Mip levels to drop so the texture is no wider than `ios_texture_cap()`.
 #[cfg(target_os = "ios")]
-fn ios_cap_skip(mips: &DecodedMips) -> usize {
-    let cap = ios_texture_cap();
+fn ios_cap_skip(mips: &DecodedMips, role: ImageRole) -> usize {
+    // A font atlas never asks for the (emergency) cap: only the GPU limit applies.
+    let cap = texture_cap_for(
+        role,
+        if role == ImageRole::FontAtlas { u32::MAX } else { ios_texture_cap() },
+        GPU_MAX_DIM.load(Ordering::Relaxed),
+    );
     let total = mips.level_sizes.len();
     let mut skip = 0usize;
     while skip + 1 < total && (mips.width.max(mips.height) >> skip) > cap {
@@ -3646,8 +3743,12 @@ fn ios_cap_skip(mips: &DecodedMips) -> usize {
 /// smaller than RGBA8); otherwise every kept level is expanded to RGBA8.
 /// Returns (storage, payload, width, height, level count).
 #[cfg(target_os = "ios")]
-fn ios_fit_for_gpu(mips: &DecodedMips, mut data: Vec<u8>) -> (MipStorage, Vec<u8>, u32, u32, u32) {
-    let cap_skip = ios_cap_skip(mips);
+fn ios_fit_for_gpu(
+    mips: &DecodedMips,
+    mut data: Vec<u8>,
+    role: ImageRole,
+) -> (MipStorage, Vec<u8>, u32, u32, u32) {
+    let cap_skip = ios_cap_skip(mips, role);
     let total = mips.level_sizes.len();
     let chain: usize = mips.level_sizes.iter().map(|size| *size as usize).sum();
     if gpu_bc() && mips.storage != MipStorage::Rgba8 && data.len() >= chain {

@@ -36,10 +36,12 @@ pub fn shadows_decision(option: Option<&str>, float32_filtering: bool) -> bool {
 }
 
 /// Feed one memory sample (what the app uses, what iOS still allows), in MiB.
-pub fn note_sample(footprint_mib: u64, available_mib: u64) {
+///
+/// `available_mib` is `None` when iOS gave no reading (unknown); `Some(0)` is a real
+/// sample meaning no headroom left, and is recorded like any other.
+pub fn note_sample(footprint_mib: u64, available_mib: Option<u64>) {
     PEAK_FOOTPRINT_MIB.fetch_max(footprint_mib, Ordering::Relaxed);
-    // A reading of 0 means "unknown", not "no memory left".
-    if available_mib > 0 {
+    if let Some(available_mib) = available_mib {
         MIN_AVAILABLE_MIB.fetch_min(available_mib, Ordering::Relaxed);
     }
 }
@@ -66,8 +68,8 @@ pub fn summary_line() -> String {
 }
 
 /// Reads the previous run's log text and says how it ended. A clean exit prints
-/// `lifecycle: process_exit`; a run closed by iOS (memory) or by the user leaves
-/// no such line.
+/// `lifecycle: process_exit`; any other end (user, iOS, crash) leaves no such line,
+/// and the absence alone does not say which.
 pub fn previous_run_note(previous_log: &str) -> String {
     if previous_log.trim().is_empty() {
         return "previous run: no log".to_owned();
@@ -88,7 +90,7 @@ pub fn previous_run_note(previous_log: &str) -> String {
         .map(|line| line.split(" | ").take(2).collect::<Vec<_>>().join(" | "))
         .unwrap_or_default();
     format!(
-        "previous run: no exit line, so iOS closed the app (often memory) or you closed it. Last sample: {}",
+        "previous run: no exit line (closed by you, by iOS, or a crash; cause not proven). Last sample: {}",
         if last_mem.is_empty() { "none" } else { last_mem.as_str() }
     )
 }
@@ -117,6 +119,7 @@ mod tests {
         let text = "x\nmem: footprint 2900 MiB | iOS still allows 90 MiB | heap live 1 MiB\n";
         let note = previous_run_note(text);
         assert!(note.contains("no exit line"));
+        assert!(!note.contains("so iOS closed"), "absence of an exit is not proof of termination");
         assert!(note.contains("footprint 2900 MiB | iOS still allows 90 MiB"));
     }
 
@@ -127,11 +130,13 @@ mod tests {
 
     #[test]
     fn summary_tracks_peak_and_minimum() {
-        note_sample(100, 900);
-        note_sample(300, 0);
-        note_sample(200, 500);
+        note_sample(100, Some(900));
+        note_sample(300, Some(0));
+        note_sample(200, Some(500));
+        note_sample(250, None);
         let line = summary_line();
         assert!(line.contains("peak footprint"));
         assert!(line.contains("least memory iOS left"));
+        assert!(line.contains("least memory iOS left 0 MiB"), "zero is a valid memory sample");
     }
 }

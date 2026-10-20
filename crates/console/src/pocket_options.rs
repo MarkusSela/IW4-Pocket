@@ -104,6 +104,24 @@ pub(crate) const OPTIONS: &[Opt] = &[
         env: "IW4L_TOUCH_CONTROLS",
         map: &[("auto", None), ("on", Some("1")), ("off", Some("0"))],
     },
+    Opt {
+        dvar: "ui_pocket_diag",
+        env: diag::detail::DIAG_ENV,
+        map: &[("auto", None), ("normal", Some("normal")), ("detailed", Some("detailed"))],
+    },
+    // Env names are literals: bootstrap's TEXT_SHARPNESS_ENV is pub(crate) and
+    // assets::weapon_residency::config::ENV_VAR is not a console dependency to keep in sync
+    // by type; test_pocket_menu_matches_the_code and the allowlist tests pin the strings.
+    Opt {
+        dvar: "ui_pocket_sharp",
+        env: "IW4L_TEXT_SHARPNESS",
+        map: &[("auto", None), ("off", Some("off")), ("native", Some("native")), ("high", Some("high")), ("medium", Some("medium"))],
+    },
+    Opt {
+        dvar: "ui_pocket_weapons",
+        env: "IW4L_SELECTIVE_WEAPONS",
+        map: &[("auto", None), ("on", Some("on")), ("off", Some("off"))],
+    },
 ];
 
 /// The menu value for what `iw4l-env.txt` currently holds. A value the menu cannot show
@@ -380,6 +398,16 @@ mod tests {
         assert_eq!(after, "# keep\nIW4L_SOUND=off\nIW4L_TIER=low\n");
         let back = diag::ios_env::merge_env_lines(&after, &[(o.env, env_value(o, "auto").unwrap())]);
         assert_eq!(back, before);
+    }
+
+    #[test]
+    fn diagnostics_row_writes_only_valid_levels() {
+        let o = OPTIONS.iter().find(|o| o.dvar == "ui_pocket_diag").unwrap();
+        assert_eq!(env_value(o, "auto"), Some(None));
+        assert_eq!(env_value(o, "detailed"), Some(Some("detailed")));
+        for (_, value) in o.map.iter().filter_map(|(s, v)| v.map(|v| (s, v))) {
+            assert!(diag::memory_settings::valid_file_setting(o.env, value), "{value}");
+        }
     }
 
     #[test]

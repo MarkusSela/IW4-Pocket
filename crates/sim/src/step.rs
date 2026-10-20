@@ -1583,6 +1583,12 @@ fn apply_give_weapon(
     if !world.weapon_runnable(weapon) {
         return reject(world, crate::GiveRejectReason::UnsupportedWeapon);
     }
+    // Caricamento selettivo: arma non residente = non ancora pronta. Rifiuto esplicito e
+    // loggato invece di un'arma invisibile (is_pending e false se la selezione non e attiva).
+    if world.weapon_pending(weapon) {
+        crate::weapon_readiness::log_preparing_once(weapon, "give");
+        return reject(world, crate::GiveRejectReason::UnsupportedWeapon);
+    }
     let Some(facts) = world.combat_facts_for(weapon) else {
         return reject(world, crate::GiveRejectReason::UnknownWeaponId);
     };
@@ -1781,6 +1787,15 @@ fn apply_give_offhand(
 fn choose_bot_class(world: &mut FrameWorld, id: ClientId, index: u8) {
     let t5 = crate::script::is_t5(world.ecs());
     let bot_classes = &world.bootstrap_ref().bot_classes;
+    if !bot_classes.is_empty()
+        && !t5
+        && let Some(pending) =
+            class_pending_weapon(world, &bot_classes[index as usize % bot_classes.len()])
+    {
+        // Arma in preparazione: mantieni lo stato precedente, niente rifiuto ne fallback.
+        crate::weapon_readiness::log_preparing_once(pending, "choose_class");
+        return;
+    }
     let def = (!bot_classes.is_empty() && !t5)
         .then(|| bot_classes[index as usize % bot_classes.len()].clone())
         .filter(|def| !def.locked && validate_class_content(world, def).is_ok());
@@ -1809,6 +1824,10 @@ fn answer_custom_class(
     let Some(def) = crate::script::personal_class(world.ecs(), id.0, crate::ClassId(slot)) else {
         return Some(ActionOutcome::Refused);
     };
+    if let Some(pending) = class_pending_weapon(world, &def) {
+        crate::weapon_readiness::log_preparing_once(pending, "custom_class");
+        return Some(ActionOutcome::Refused);
+    }
     if validate_class_content(world, &def).is_err() {
         return Some(ActionOutcome::Refused);
     }
@@ -1849,6 +1868,12 @@ fn apply_select_class(
         return ActionOutcome::Refused;
     };
 
+    if let Some(pending) = class_pending_weapon(world, &def) {
+        // Differito: stato precedente invariato, nessun ClassRejected/LockedContent.
+        crate::weapon_readiness::log_preparing_once(pending, "select_class");
+        return ActionOutcome::Refused;
+    }
+
     if let Err(reason) = validate_class_content(world, &def) {
         diag::info!(
             Sim,
@@ -1883,6 +1908,13 @@ fn apply_select_class(
         },
     );
     ActionOutcome::Accepted
+}
+
+/// Prima arma non pronta della classe (solo con caricamento selettivo attivo).
+fn class_pending_weapon(world: &FrameWorld, def: &crate::ClassDef) -> Option<u32> {
+    [def.primary, def.secondary, def.lethal, def.tactical]
+        .into_iter()
+        .find(|&id| world.weapon_pending(id))
 }
 
 fn validate_class_content(

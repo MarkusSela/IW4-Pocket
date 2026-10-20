@@ -50,6 +50,7 @@ mod sound_alias_cs;
 pub mod spawn;
 mod step;
 pub mod t5_destructible;
+mod weapon_readiness;
 mod world;
 pub mod world_objects;
 
@@ -170,6 +171,7 @@ pub use objectives::{
     VehicleHudTarget,
 };
 
+pub use weapon_readiness::WeaponReadiness;
 pub use world::{SimContent, SimContentBuilder, WeaponSetup};
 
 mod script_audio;

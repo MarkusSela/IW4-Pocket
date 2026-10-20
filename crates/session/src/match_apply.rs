@@ -323,6 +323,13 @@ pub fn apply_prepared_match(
         let combat = combat_table::from_registry(&weapons.0, lochit_table);
         content.set_weapon_combat_table(combat.clone());
         content.set_weapon_runnable_table(weapons.0.runnable_table());
+        {
+            // Selettivo attivo => tabella di prontezza; altrimenti active=false (invariato).
+            let (ready, active) = assets::selective_weapons::current_readiness(&weapons.0);
+            if active {
+                content.set_weapon_readiness(sim::WeaponReadiness::new(ready, true));
+            }
+        }
         content.set_weapon_transition_groups(weapons.0.configuration_transition_groups());
         content.set_bullet_pen_facts(combat_table::pen_from_registry(&weapons.0));
         content.set_penetration_table(pen_table);

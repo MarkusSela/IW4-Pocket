@@ -328,7 +328,7 @@ pub(crate) fn parse_bot_args(args: &[String]) -> Result<BotVerb, String> {
                 .get(1)
                 .and_then(|s| s.parse::<u32>().ok())
                 .unwrap_or(1)
-                .clamp(1, 16);
+                .clamp(1, bots::MAX_HOST_BOTS);
             Ok(BotVerb::Add(n))
         }
         "dummy" => {
@@ -341,8 +341,8 @@ pub(crate) fn parse_bot_args(args: &[String]) -> Result<BotVerb, String> {
                 .transpose()
                 .map_err(|_| "usage: bot dummy [N]".to_owned())?
                 .unwrap_or(1);
-            if !(1..=16).contains(&n) {
-                return Err("bot dummy: count must be 1..16".into());
+            if !(1..=bots::MAX_HOST_BOTS).contains(&n) {
+                return Err(format!("bot dummy: count must be 1..{}", bots::MAX_HOST_BOTS));
             }
             Ok(BotVerb::Dummy(n))
         }

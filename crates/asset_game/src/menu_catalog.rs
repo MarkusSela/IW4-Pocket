@@ -947,6 +947,26 @@ impl MenuSink {
                 materials.push(font.glow_material.clone());
             }
         }
+        // Font role comes from the capture: the images behind font materials are
+        // glyph atlases and are exempt from the texture cap.
+        let mut atlases = 0usize;
+        let (mut max_w, mut max_h) = (0u32, 0u32);
+        for material in &materials {
+            let key = AssetRef::bare_name(material).to_ascii_lowercase();
+            let Some(image) = self.material_ts2d.get(&key).and_then(|i| self.images.get(*i)) else {
+                continue;
+            };
+            asset_material::register_font_atlas(&image.name);
+            atlases += 1;
+            if u32::from(image.width) * u32::from(image.height) > max_w * max_h {
+                max_w = u32::from(image.width);
+                max_h = u32::from(image.height);
+            }
+        }
+        diag::info!(
+            World,
+            "font atlas exempt from texture cap: {atlases} atlases, largest {max_w}x{max_h}"
+        );
         for name in ["main", "main_text", "menu_xboxlive_lobby"]
             .into_iter()
             .chain(HUD_CHROME_MENUS.iter().copied())

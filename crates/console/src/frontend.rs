@@ -285,6 +285,8 @@ pub(crate) fn route(
                     party.in_lobby = true;
                     party.is_host = true;
                     state.public = false;
+                    // A new lobby gets its own bot names; refreshes and rematches keep them.
+                    bots::reset_lobby_names();
                     dvars.set("ui_frontend_status", "");
                     menus.write(UiMenuRequest::Open("game_lobby".into()));
                 }
@@ -326,15 +328,16 @@ pub(crate) fn route(
                     let first = command.args.first().map(String::as_str);
                     let wanted = services.bots.as_mut().ok_or("Bots are unavailable")?;
                     let new = if first == Some("cycle") {
-                        // The BOTS row in the Private Match menu: one more each tap, 0 after 10.
-                        if wanted.0 >= bots::UI_MAX_BOTS {
+                        // The BOTS row in the Private Match menu: one more each tap, 0 after the
+                        // most a lobby holds (a private lobby has the host as its only human).
+                        if wanted.0 >= bots::bot_room_for(1) {
                             0
                         } else {
                             wanted.0 + 1
                         }
                     } else {
                         let delta = first.and_then(|arg| arg.parse::<isize>().ok()).unwrap_or(0);
-                        (wanted.0 as isize + delta).clamp(0, bots::UI_MAX_BOTS as isize) as u32
+                        (wanted.0 as isize + delta).clamp(0, bots::bot_room_for(1) as isize) as u32
                     };
                     if new != wanted.0 {
                         wanted.0 = new;
@@ -365,6 +368,7 @@ pub(crate) fn route(
                             .request_zone(map.clone())
                             .map_err(|error| error.to_string())?;
                         commands.insert_resource(mode);
+                        diag::events::note_map(&map);
                         echo.write(format!(
                             "menu: starting {map} {} (swap #{id})",
                             mode.token()
@@ -706,20 +710,26 @@ pub(crate) fn route(
             _ => {}
         }
     } else {
-        dvars.set("ui_lobby_players", "PLAYERS: 1 / 18");
+        dvars.set(
+            "ui_lobby_players",
+            format!("PLAYERS: 1 / {}", bots::MAX_PARTICIPANTS),
+        );
     }
     // Bots wanted for the next match sit in the list, so the lobby shows who will play.
     let bots_row = !state.public && party.in_lobby && party.is_host;
     if bots_row {
         let wanted = services.bots.as_ref().map_or(0, |b| b.0);
-        lobby_names.extend(bots::lobby_bot_names(wanted).into_iter().map(str::to_owned));
+        // The humans listed so far leave this many seats; a larger request shows fewer.
+        // Not logged here: this runs every frame, the roster logs the real refusal.
+        let shown = wanted.min(bots::bot_room_for(lobby_names.len() as u32));
+        lobby_names.extend(bots::lobby_bot_names(shown).into_iter().map(str::to_owned));
         dvars.set(
             "ui_lobby_players",
-            format!("PLAYERS: {} / 18", lobby_names.len()),
+            format!("PLAYERS: {} / {}", lobby_names.len(), bots::MAX_PARTICIPANTS),
         );
     }
     dvars.set("ui_lobby_bots_row", if bots_row { "1" } else { "0" });
-    for row in 0..18 {
+    for row in 0..bots::MAX_PARTICIPANTS as usize {
         let name = lobby_names.get(row);
         dvars.set(
             &format!("ui_lobby_member_{row}"),

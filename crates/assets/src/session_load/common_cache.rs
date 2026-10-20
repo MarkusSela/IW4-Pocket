@@ -6,6 +6,9 @@ static NEXT_COMMON_PROFILE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic:
 pub struct CommonKey {
     pub(super) runtime: Option<PathBuf>,
     pub(super) foreign: Option<PathBuf>,
+    /// Digest della selezione di armi (None = precaricamento completo): cache full e
+    /// selettiva non si mescolano.
+    pub(super) selection_digest: Option<u64>,
 }
 
 impl CommonKey {
@@ -17,6 +20,7 @@ impl CommonKey {
         Self {
             runtime: runtime.map(Path::to_path_buf),
             foreign: resolve_foreign_material_donor(zone_ff, runtime, report),
+            selection_digest: crate::selective_weapons::plan_selection().map(|s| s.digest),
         }
     }
 
@@ -31,6 +35,7 @@ impl CommonKey {
         Self {
             runtime,
             foreign: None,
+            selection_digest: None,
         }
     }
 }
@@ -43,6 +48,9 @@ impl std::fmt::Display for CommonKey {
         }
         if let Some(foreign) = &self.foreign {
             write!(f, " + {}", foreign.display())?;
+        }
+        if let Some(digest) = self.selection_digest {
+            write!(f, " [selective {digest:016x}]")?;
         }
         Ok(())
     }
@@ -237,6 +245,7 @@ pub async fn load_shell_common(games: asset_transport::GamesRoot) -> ShellCommon
     let key = CommonKey::shell(&games, &mut report);
     let (common, reach) = ensure_common(key).await;
     let weapons = common.products.weapons.clone().publish();
+    crate::selective_weapons::remember_registry(&weapons);
     report.push(format!(
         "CAC: {reach} common set {}; weapons={} (iw4={} iw5={} t5={} t6={}) tables={}",
         common.key,
@@ -290,6 +299,8 @@ async fn prepare_common(key: CommonKey) -> Arc<CommonSet> {
     let progress = LoadProgress::default();
     let pool = load_pool();
     let anchor = key.runtime.clone();
+    // Filtro selettivo del walk common_mp: None => precaricamento completo (come oggi).
+    crate::selective_weapons::set_walk_closure(key.selection_digest);
 
     let startup_walk = {
         let anchor = anchor.clone();

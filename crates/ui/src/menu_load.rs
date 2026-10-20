@@ -79,6 +79,7 @@ fn insert_loading_chrome(
     request_id: u64,
     mode: sim::HostGameModeSelection,
 ) {
+    diag::events::note_map(zone);
     diag::info!(Ui, "loading: map={zone} mode={}", mode.token());
     commands.insert_resource(LoadingScreen::new(
         progress,

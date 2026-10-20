@@ -245,10 +245,16 @@ pub fn valid_file_setting(name: &str, value: &str) -> bool {
         // 1 = do not prepare weapon camouflage skins (saves memory; guns lose their camos).
         "IW4L_SKIP_CAMO" => matches!(value, "0" | "1"),
         "IW4L_TOUCH_CONTROLS" => matches!(value, "0" | "1"),
+        // Log detail (see detail.rs): normal drops per-frame/per-tick lines.
+        crate::detail::DIAG_ENV => matches!(value, "normal" | "detailed"),
+        // Text/UI sharpness (bootstrap::text_sharpness) and selective weapon loading
+        // (assets::weapon_residency::config); same values their parsers accept.
+        "IW4L_TEXT_SHARPNESS" => matches!(value, "auto" | "off" | "native" | "high" | "medium"),
+        "IW4L_SELECTIVE_WEAPONS" => matches!(value, "auto" | "on" | "off"),
         // Startup commands for iOS (no console there), e.g. `map mp_rust; bot add 5`.
         "IW4L_CMDS" => valid_startup_cmds(value),
         // Bots added to every hosted match; the console's `bot add` needs a keyboard.
-        "IW4L_BOTS" => value.parse::<u32>().is_ok_and(|n| n <= 10),
+        "IW4L_BOTS" => value.parse::<u32>().is_ok_and(|n| n <= 17),
         _ => false,
     }
 }
@@ -405,8 +411,8 @@ mod tests {
         assert!(!valid_file_setting(IOS_BC_ENV, "yes"));
         assert!(!valid_file_setting(SHADER_WORKERS_ENV, "0"));
         assert!(valid_file_setting("IW4L_BOTS", "0"));
-        assert!(valid_file_setting("IW4L_BOTS", "10"));
-        assert!(!valid_file_setting("IW4L_BOTS", "11"));
+        assert!(valid_file_setting("IW4L_BOTS", "17"));
+        assert!(!valid_file_setting("IW4L_BOTS", "18"));
         assert!(!valid_file_setting("IW4L_BOTS", "-1"));
         assert!(!valid_file_setting("IW4L_GAMES", "/tmp"));
         assert!(!valid_file_setting("IW4L_UNKNOWN", "1"));
@@ -438,6 +444,23 @@ mod tests {
             assert!(!valid_startup_cmds(v), "{v:?}");
         }
         assert!(!valid_startup_cmds(&"map a;".repeat(40)));
+        assert!(valid_file_setting("IW4L_DIAG", "normal"));
+        assert!(valid_file_setting("IW4L_DIAG", "detailed"));
+        for v in ["", "auto", "Normal", "on", "1", " detailed", "detailed\0"] {
+            assert!(!valid_file_setting("IW4L_DIAG", v), "{v:?}");
+        }
+        for v in ["auto", "off", "native", "high", "medium"] {
+            assert!(valid_file_setting("IW4L_TEXT_SHARPNESS", v), "{v:?}");
+        }
+        for v in ["", "Native", "1", "on", "high\0", " off"] {
+            assert!(!valid_file_setting("IW4L_TEXT_SHARPNESS", v), "{v:?}");
+        }
+        for v in ["auto", "on", "off"] {
+            assert!(valid_file_setting("IW4L_SELECTIVE_WEAPONS", v), "{v:?}");
+        }
+        for v in ["", "On", "1", "0", "yes", "off\0"] {
+            assert!(!valid_file_setting("IW4L_SELECTIVE_WEAPONS", v), "{v:?}");
+        }
         for name in ["IW4L_DT_SNAP", "IW4L_FRAME_STATS"] {
             assert!(valid_file_setting(name, "0"));
             assert!(valid_file_setting(name, "1"));

@@ -782,6 +782,9 @@ impl ZoneLane for Iw4Lane {
         sink.seed_materials(material_seed);
         sink.set_capture_zone(asset_core::ZoneOwner::intern(&zone_name));
         sink.set_capture_ns(asset_core::AssetNamespace::Iw4);
+        if let Some(closure) = crate::selective_weapons::walk_closure() {
+            sink.set_capture_filter(closure);
+        }
         sink.sound = asset_audio::ZoneSoundCapture::claim_common(
             path,
             asset_audio::ZoneGame::Iw4,
@@ -794,6 +797,7 @@ impl ZoneLane for Iw4Lane {
         if let Some(stage) = sink.stage.take() {
             stage.finish_from(&walk);
         }
+        sink.log_capture_filter_summary();
         let mut report = sink.models.report("common_mp");
         report.splice(0..0, report_arenas.drain(..));
         if let Err(error) = walk {

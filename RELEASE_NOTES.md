@@ -1,30 +1,29 @@
-# IW4 Pocket 0.3.7c — build 21
+# IW4 Pocket 0.3.8 — build 22
 
-**Experimental prerelease. Not verified on a phone.** Menu, bot names and options changes. It does not fix the memory crash: that is still unproven and the 0.3.7b log showed about the same footprint (~3067 MiB).
-
-## IW4 Pocket options menu
-- Rows are spaced further apart and each description sits under its option, over two lines, saying what it does and what it costs.
-- Render scale now offers 0.4, 0.3 and 0.2 besides the earlier values (Auto/On/Off style, adjustable by hand). Lower values draw fewer pixels and use less GPU memory, and look blurrier. The saving is an estimate from pixel counts, not a measurement.
+**Experimental prerelease. Not verified on a phone.** This build does not claim to fix the memory crash: that is still unproven.
 
 ## Bots
-- Names are drawn again every time the number of bots changes (lobby add/remove); the same number keeps the same names. Lobby and match use the same order.
-- Joke clan tags (83) such as `[420]` are put in front of some names. A tag is added only if `[TAG]name` still fits the 15 bytes the protocol allows; the name itself is never cut or changed. Existing names are untouched.
+- Up to **17 bots**: with you that makes **18 participants**, the protocol cap. Before, the options file, the console and the lobby stopped lower.
+- `IW4L_BOTS` now accepts 0 to 17; `bot add` and `bot dummy` accept up to 17.
+- Bot names are stable: the same number of bots keeps the same names, and names are not redrawn on every lobby change.
 
-## Menu and SideStore
-- Main menu: the release name is shown small in the bottom-right corner.
-- SideStore source: the newest stable release stays first, newer pre-releases are listed after it marked TEST, and older pre-releases and older stable releases are hidden.
+## Selective weapon loading
+- Auto = on for the Low memory tier: only the weapons in use are loaded.
+- Limitations: a class change mid-match to a weapon that is not loaded, and weapons placed on the map, are refused with a "preparing" log line until the next match.
+- Options > Selective weapon loading > Off restores full loading (`IW4L_SELECTIVE_WEAPONS=off`).
+
+## Text/UI sharpness
+- Only active when you pick Native, High or Medium **and** the 3D scale is below 0.6. Auto and Off behave as before.
+- Experimental: it may show a black screen. If it does, set it to Off.
+- Font atlases are exempt from the texture cap.
+- The new settings are rows in the IW4 Pocket options menu (now 8 + 8 rows over two pages).
 
 ## Diagnostics
-- `mem:` lines now include the memory outside the Rust heap (footprint minus reserved heap), to tell whether growth comes from graphics memory.
-
-## Fix
-- Test `nested_client_and_objective_strings_grow_the_estimate` compared against the wrong baseline; the assertion was corrected. The estimator itself is unchanged.
-
-## Not included
-- Weapons on demand: on Low the weapon cache is already 0 MiB (`IW4L_FPV_RETAIN_MIB=0`), so there is nothing proven to free.
-- No allocator replacement.
+- Diagnostic detail Normal/Detailed (Options > Diagnostics, `IW4L_DIAG`).
+- A memory reading of 0 MiB is now a valid sample. Before, "iOS still allows 0 MiB" was thrown away, so the session summary could hide the moment with the least headroom. Only a missing reading counts as unknown (`?`).
+- The note about the previous run is neutral. A log with no exit line is reported as "no exit line (closed by you, by iOS, or a crash; cause not proven)" with the last memory sample, instead of saying iOS closed the app.
 
 ## Version
-- Label **0.3.7c**; Cargo `0.3.7-beta.2`; bundle build **21**.
+- Label **0.3.8**; Cargo `0.3.8`; bundle build **22**.
 
-Verification scope: Python source-contract checks, `sim` memory tests and the bot-name logic were run on the server. `bots`, `console` and `launcher` are compiled only by the iOS CI. Nothing here has been tried on a device.
+Verification scope: Python source-contract checks run on the server. The Rust crates (`diag`, `console`, `bots`, `launcher`) are compiled only by the iOS CI. Nothing here has been tried on a device.

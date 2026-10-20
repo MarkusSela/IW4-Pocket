@@ -56,6 +56,15 @@ OPTIONS = [
     ("ui_pocket_touch", "On-screen controls",
      ("Touch buttons on the screen. Auto shows", "them only when no controller is connected."),
      [("Auto", "auto"), ("On", "on"), ("Off", "off")]),
+    ("ui_pocket_diag", "Diagnostics",
+     ("Normal keeps the log short: no per-frame or bot detail.", "Detailed writes everything, for bug reports."),
+     [("Auto", "auto"), ("Normal", "normal"), ("Detailed", "detailed")]),
+    ("ui_pocket_sharp", "Text/UI sharpness",
+     ("Experimental. Only works below 3D scale 0.6.", "If the screen goes black, set Off."),
+     [("Auto", "auto"), ("Off", "off"), ("Native", "native"), ("High", "high"), ("Medium", "medium")]),
+    ("ui_pocket_weapons", "Selective weapon loading",
+     ("Auto loads only the weapons in use on Low memory.", "Off loads every weapon (more memory)."),
+     [("Auto", "auto"), ("On", "on"), ("Off", "off")]),
 ]
 
 ROW = 36          # distance between two rows (it was 23: descriptions need room)
@@ -111,7 +120,7 @@ def dynamic_label(name, dvar, y, scale=0.25):
     return item
 
 
-PAGE = 6  # rows on the first page
+PAGE = 8  # rows on the first page (balanced: 8 + 8)
 LABELS = {1: "More options >", 2: "< Back to main options"}
 
 

@@ -297,6 +297,7 @@ pub struct SimContentBuilder {
     weapon_def_scales: Vec<(f32, f32, f32)>,
     weapon_combat: Vec<WeaponCombatFacts>,
     weapon_runnable: Vec<bool>,
+    weapon_readiness: crate::WeaponReadiness,
     weapon_transition_groups: Vec<u32>,
     bullet_pen: Vec<weapon_iw4::BulletPenFacts>,
     pen_table: weapon_iw4::PenetrationDepthTable,
@@ -369,6 +370,11 @@ impl SimContentBuilder {
 
     pub fn set_weapon_runnable_table(&mut self, runnable: Vec<bool>) {
         self.weapon_runnable = runnable;
+    }
+
+    /// Tabella di prontezza del caricamento selettivo (active=false => invariato).
+    pub fn set_weapon_readiness(&mut self, readiness: crate::WeaponReadiness) {
+        self.weapon_readiness = readiness;
     }
 
     pub fn set_weapon_transition_groups(&mut self, groups: Vec<u32>) {
@@ -1440,6 +1446,10 @@ impl SimState {
             return false;
         };
         group != 0 && groups.get(to as usize) == Some(&group)
+    }
+
+    pub(crate) fn weapon_pending(&self, id: u32) -> bool {
+        id != 0 && self.content.data.weapon_readiness.is_pending(id)
     }
 
     pub(crate) fn weapon_runnable(&self, id: u32) -> bool {

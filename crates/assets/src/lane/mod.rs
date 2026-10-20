@@ -1,3 +1,4 @@
+mod capture_filter;
 mod helpers;
 mod iw4;
 mod iw5;

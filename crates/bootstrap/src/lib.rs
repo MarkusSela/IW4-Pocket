@@ -8,10 +8,12 @@ mod ios_input;
 #[cfg(target_os = "ios")]
 mod touch_controls;
 mod launch;
+mod match_summary;
 mod open_url;
 mod plugins;
 mod promotion;
 mod render_scale;
+mod text_sharpness;
 
 pub use args::{AcceptanceLaunch, LaunchMode, parse_cli};
 pub use launch::launch;

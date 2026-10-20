@@ -11,7 +11,7 @@ use crate::nav::{self, NAV_HULL, NAV_SCHEMA, NavGraph, RouteStats};
 use crate::query::{Budgeted, QueryCounters, QuerySubsystem, TraceBudget};
 use crate::roster::{
     BotAddQueue, BotFireQueue, BotHold, BotRoster, BotTpQueue, BotTpTarget, BotTpWhere,
-    MAX_HOST_BOTS, default_class_index,
+    MAX_HOST_BOTS, MAX_PARTICIPANTS, default_class_index,
 };
 use crate::sensor;
 use frame::{AuthoritySet, BotNavigationReady, ClientSet, HasWorld, MatchTornDown, RuntimeRole};
@@ -155,12 +155,10 @@ fn reset_roster_on_match_torn_down(
 
 const AUTO_FILL_ENV: &str = "IW4L_BOTS";
 
-/// Most bots the phone menus offer. The engine allows `MAX_HOST_BOTS`; more bots cost memory.
-pub const UI_MAX_BOTS: u32 = 10;
-
 /// How many bots every match this process hosts starts with. One value for all the ways to
 /// set it: `IW4L_BOTS` in iw4l-env.txt, the IW4 Pocket options row and the lobby row.
-/// Changing it applies to the next match.
+/// Changing it applies to the next match. At most `MAX_HOST_BOTS`; the roster still
+/// admits only as many as fit next to the humans actually present.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BotWanted(pub u32);
 
@@ -170,7 +168,7 @@ impl Default for BotWanted {
             std::env::var(AUTO_FILL_ENV)
                 .ok()
                 .and_then(|value| value.trim().parse::<u32>().ok())
-                .map_or(0, |n| n.min(UI_MAX_BOTS)),
+                .map_or(0, |n| n.min(MAX_HOST_BOTS)),
         )
     }
 }
@@ -233,12 +231,18 @@ fn drain_bot_add_queue(
     }
     for request in requests {
         let count = request.count;
+        // Every request sees the bots the previous one added, so one frame cannot
+        // overshoot the shared capacity.
+        let room = roster.room(&taken);
         let added = roster.add_bots(count, &taken, request.dummy);
         if added.len() < count as usize {
             diag::warn!(
                 Sim,
-                "bots: add {count} — only {} minted, the roster is full",
-                added.len()
+                "bots: roster full — add {count} gave {}; {} of {MAX_PARTICIPANTS} slots held \
+                 ({} bots, room was {room})",
+                added.len(),
+                roster.occupied(&taken),
+                roster.bots.len()
             );
         }
         diag::info!(
@@ -247,6 +251,9 @@ fn drain_bot_add_queue(
             request.dummy,
             added.iter().map(|id| id.0).collect::<Vec<_>>()
         );
+        let names: Vec<(u32, &str)> = roster.bots.iter().filter(|b| added.contains(&b.id)).map(|b| (b.id.0, b.name)).collect();
+        let refusal = (added.len() < count as usize).then_some("roster full");
+        diag::events::bots_event(count, added.len() as u32, roster.bots.len() as u32, refusal, &names);
     }
 }
 

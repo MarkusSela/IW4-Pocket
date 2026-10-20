@@ -55,6 +55,8 @@ pub fn add_runtime_plugins_with_role(app: &mut App, role: RuntimeRole) {
     crate::idle_timer::register(app);
     // iOS present pacing, dt snap and frame timing stats; nothing elsewhere.
     crate::frame_pace::register(app);
+    // Every 30 s of a running match: time, map, bots, FPS, memory.
+    crate::match_summary::register(app);
     // "Send logs" in IW4 Pocket options opens the project's GitHub page.
     crate::open_url::register(app);
     // Render setup can finish after Startup, so watch for the resource.

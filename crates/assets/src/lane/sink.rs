@@ -205,6 +205,8 @@ pub(crate) struct ZoneWalkSink {
 
 #[derive(Default)]
 pub(crate) struct CommonWalkSink {
+    /// Filtro di cattura del caricamento selettivo (None = precaricamento completo).
+    pub(crate) capture_filter: Option<super::capture_filter::CaptureFilter>,
     pub scripts: crate::ScriptSources,
     pub scene_models: asset_world::MapXModelSceneCatalog,
     pub shared_surfaces: asset_model::SharedXModelSurfaces,
@@ -302,6 +304,24 @@ impl CommonWalkSink {
             stage: Some(stage),
             ..Default::default()
         }
+    }
+
+    /// Installa il filtro selettivo costruito dalla closure.
+    pub(crate) fn set_capture_filter(&mut self, closure: crate::weapon_residency::WeaponClosure) {
+        self.capture_filter = Some(super::capture_filter::CaptureFilter::new(closure));
+    }
+
+    /// Logga il riepilogo del filtro (una volta a fine walk).
+    pub(crate) fn log_capture_filter_summary(&self) {
+        if let Some(filter) = self.capture_filter.as_ref() {
+            diag::info!(World, "{}", filter.summary());
+        }
+    }
+
+    fn allow_xmodel_capture(&mut self, name: &str) -> bool {
+        self.capture_filter
+            .as_mut()
+            .is_none_or(|filter| filter.allow_xmodel(name))
     }
 
     pub(crate) fn seed_materials(&mut self, mut materials: MaterialCatalog) {
@@ -602,6 +622,9 @@ impl fastfile_iw5::AssetLinkSink for CommonWalkSink {
             if let Some(geometry) = stream.latest_xmodel()
                 && let Some(name) = geometry.name.and_then(|p| stream.cstr(p).ok())
             {
+                if !self.allow_xmodel_capture(name) {
+                    return Ok(());
+                }
                 let asset = asset_model::capture_xmodel_skel_iw5(
                     stream,
                     &self.strings_iw5,
@@ -1448,13 +1471,18 @@ impl AssetLinkSink for CommonWalkSink {
             if let Some(geometry) = stream.xmodel()
                 && let Some(name) = geometry.name.and_then(|p| stream.cstr(p).ok())
             {
-                let skel = asset_model::capture_xmodel_skel(
-                    stream,
-                    &self.script_strings,
-                    geometry,
-                    Some(&self.materials),
-                )
-                .map(std::sync::Arc::new);
+                let keep = self.allow_xmodel_capture(name);
+                let skel = keep
+                    .then(|| {
+                        asset_model::capture_xmodel_skel(
+                            stream,
+                            &self.script_strings,
+                            geometry,
+                            Some(&self.materials),
+                        )
+                    })
+                    .flatten()
+                    .map(std::sync::Arc::new);
                 if let Some(skel) = &skel {
                     self.shared_surfaces.retain(stream, geometry, skel.clone());
                     self.fx_models.capture_shared(skel.clone(), &self.materials);
@@ -1464,13 +1492,17 @@ impl AssetLinkSink for CommonWalkSink {
                     self.projectile_meshes
                         .capture_shared_unclassified(skel, &self.materials);
                 }
-                let asset = skel.map(asset_world::MapXModelSceneAsset::Iw4).unwrap_or(
-                    asset_world::MapXModelSceneAsset::Unavailable {
-                        reason: "common XModel skeleton capture failed",
-                    },
-                );
-                self.scene_models
-                    .insert(asset_world::MapXModelAssetKey(name.to_owned()), asset);
+                if keep {
+                    let asset = skel.map(asset_world::MapXModelSceneAsset::Iw4).unwrap_or(
+                        asset_world::MapXModelSceneAsset::Unavailable {
+                            reason: "common XModel skeleton capture failed",
+                        },
+                    );
+                    self.scene_models
+                        .insert(asset_world::MapXModelAssetKey(name.to_owned()), asset);
+                }
+                // keep == false: modello di arma non selezionato, non residente (nessuna riga fantasma).
+
             }
             self.models.capture(stream);
         }
@@ -1500,6 +1532,9 @@ impl AssetLinkSink for CommonWalkSink {
         if ty == AssetType::XModel {
             if let Some(&name) = self.xmodel_names.get(&target) {
                 self.xmodel_names.insert(slot, name);
+            } else if let Some(filter) = self.capture_filter.as_mut() {
+                // Alias di un modello saltato (non residente): nessun nome, nessun panic.
+                filter.note_alias_unresolved();
             }
         }
         Ok(())
@@ -1514,6 +1549,12 @@ impl AssetLinkSink for CommonWalkSink {
         s: &ZoneStream<'_>,
         geometry: XAnimPartsGeometry,
     ) -> fastfile_iw4::Result<()> {
+        if let Some(filter) = self.capture_filter.as_mut()
+            && let Some(name) = geometry.name.and_then(|p| s.cstr(p).ok())
+            && !filter.allow_xanim(name)
+        {
+            return Ok(());
+        }
         self.xanims.capture_xanim(s, geometry)
     }
 

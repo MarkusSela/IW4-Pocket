@@ -35,4 +35,7 @@ pub use drawsurf::{
     split_bind_layout, texture_table_bind_entries, vertex_layouts_from_contract,
     write_buffer_padded, write_buffer_range,
 };
+pub use drawsurf::scene_split::{
+    effective_scene_size, scene_size_override, set_scene_size_override,
+};
 pub use plugin::RenderGpuPlugin;

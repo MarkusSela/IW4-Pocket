@@ -17,10 +17,10 @@ class Contract(unittest.TestCase):
         cargo = re.search(r'^version = "([^"]+)"$', text("crates/launcher/Cargo.toml"), re.M).group(1)
         plist = plistlib.loads((ROOT / "ios/Info.plist").read_bytes())
         self.assertEqual(plist["CFBundleShortVersionString"], cargo.split("-", 1)[0])
-        self.assertEqual(cargo, "0.3.7-beta.2")
-        self.assertEqual(plist["CFBundleVersion"], "21")
+        self.assertEqual(cargo, "0.3.8")
+        self.assertEqual(plist["CFBundleVersion"], "22")
         # The label shown in the main menu is the release name.
-        self.assertIn('const APP_LABEL: &str = "0.3.7c";', text("crates/launcher/src/main.rs"))
+        self.assertIn('const APP_LABEL: &str = "0.3.8";', text("crates/launcher/src/main.rs"))
         self.assertEqual(plist["CFBundleIdentifier"], "com.markussela.iw4l")
         lock = re.search(r'name = "launcher"\nversion = "([^"]+)"', text("Cargo.lock"))
         self.assertIsNotNone(lock)

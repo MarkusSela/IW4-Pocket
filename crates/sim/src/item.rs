@@ -625,6 +625,11 @@ fn grab_number(world: &mut FrameWorld, walker: ClientId, number: i32) {
     if weapon == 0 {
         return;
     }
+    if world.weapon_pending(weapon) {
+        // Arma non ancora residente: non assegnare, l'oggetto resta a terra.
+        crate::weapon_readiness::log_preparing_once(weapon, "pickup");
+        return;
+    }
     let Some(ps) = world.player(walker).copied() else {
         return;
     };
