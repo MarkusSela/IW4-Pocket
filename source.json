@@ -18,6 +18,26 @@
       "category": "games",
       "versions": [
         {
+          "version": "0.3.8",
+          "buildVersion": "22",
+          "date": "2026-10-20T10:22:22Z",
+          "size": 39050743,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.8/IW4.Pocket.ipa",
+          "localizedDescription": "TEST 0.3.8 — Experimental prerelease. Not verified on a phone. No confirmed fix for the memory crash. Experimental prerelease. Not verified on a phone. This build does not claim to fix the memory crash: that is still unproven.",
+          "minOSVersion": "15.0",
+          "sha256": "c4aa81f504c6b30757d4f9fa79c245d8454cb21136b886479c4ccc7c27326341"
+        },
+        {
+          "version": "0.3.7",
+          "buildVersion": "21",
+          "date": "2026-10-17T11:59:52Z",
+          "size": 38966283,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.7c/IW4.Pocket.ipa",
+          "localizedDescription": "TEST 0.3.7c — Experimental prerelease. Not verified on a phone. No confirmed fix for the memory crash. Experimental prerelease. Not verified on a phone. Menu, bot names and options changes. It does not fix the memory crash: that is still unproven and the 0.3.7b log showed about the same footprint (~3067 MiB).",
+          "minOSVersion": "15.0",
+          "sha256": "55b188fe470dcf4851dda099567bc5188effa675ac66227f8f32316433616562"
+        },
+        {
           "version": "0.3.6",
           "buildVersion": "18",
           "date": "2026-10-15T02:44:38Z",
@@ -26,48 +46,86 @@
           "localizedDescription": "Tested on one phone (iPhone 13 Pro Max, about 3 GB for the app): the lobby and in-match bot rows work and mp_rust loads, but a match still ends when iOS closes the app for memory after a few minutes. This release does not fix that. It adds bots you can add in the lobby and during a match, an opti...",
           "minOSVersion": "15.0",
           "sha256": "e5dccf81423e6d4cb285ac766f8462101ce79d671712ba23e2544288dd2607bb"
-        }
-      ],
-      "releaseChannels": [
-        {
-          "track": "stable",
-          "releases": [
-            {
-              "version": "0.3.6",
-              "buildVersion": "18",
-              "date": "2026-10-15T02:44:38Z",
-              "size": 38919279,
-              "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.6/IW4.Pocket.ipa",
-              "localizedDescription": "Tested on one phone (iPhone 13 Pro Max, about 3 GB for the app): the lobby and in-match bot rows work and mp_rust loads, but a match still ends when iOS closes the app for memory after a few minutes. This release does not fix that. It adds bots you can add in the lobby and during a match, an opti...",
-              "minOSVersion": "15.0",
-              "sha256": "e5dccf81423e6d4cb285ac766f8462101ce79d671712ba23e2544288dd2607bb"
-            }
-          ]
         },
         {
-          "track": "nightly",
-          "releases": [
-            {
-              "version": "0.3.7",
-              "buildVersion": "21",
-              "date": "2026-10-17T11:59:52Z",
-              "size": 38966283,
-              "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.7c/IW4.Pocket.ipa",
-              "localizedDescription": "TEST 0.3.7c — Experimental prerelease. Not verified on a phone. No confirmed fix for the memory crash. Experimental prerelease. Not verified on a phone. Menu, bot names and options changes. It does not fix the memory crash: that is still unproven and the 0.3.7b log showed about the same footprint (~3067 MiB).",
-              "minOSVersion": "15.0",
-              "sha256": "55b188fe470dcf4851dda099567bc5188effa675ac66227f8f32316433616562"
-            },
-            {
-              "version": "0.3.7",
-              "buildVersion": "20",
-              "date": "2026-10-17T02:31:07Z",
-              "size": 38963383,
-              "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.7b/IW4.Pocket.ipa",
-              "localizedDescription": "TEST 0.3.7b — Experimental prerelease. Not verified on a phone. No confirmed fix for the memory crash. Experimental prerelease. Not verified on a phone. This changes snapshot archive memory accounting; it is not a confirmed fix for iOS closing a match. No device memory saving or stability improvement has been measured yet.",
-              "minOSVersion": "15.0",
-              "sha256": "a16e1c4b41ed5805971f5a02d5b01742addb4e815e1508ef22fe077f1d184ea3"
-            }
-          ]
+          "version": "0.3.4",
+          "buildVersion": "16",
+          "date": "2026-10-14T19:08:15Z",
+          "size": 38892350,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.4/IW4.Pocket.ipa",
+          "localizedDescription": "Test build aimed at phones with a 3 GB memory grant (iPhone 13 Pro Max, iPhone 15, SideStore with a free account), where mp_rust was closed by iOS while the map prepared its graphics. Not yet tested on a phone. Please send iw4l-boot.log and iw4l-memory-settings.txt.",
+          "minOSVersion": "15.0",
+          "sha256": "046e876949ac113f7d36341b59726bf7b935373342209bcf5028830159fb5bdb"
+        },
+        {
+          "version": "0.3.3",
+          "buildVersion": "15",
+          "date": "2026-10-11T10:47:30Z",
+          "size": 38866749,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.3/IW4.Pocket.ipa",
+          "localizedDescription": "Built to get mp_rust running on the iPhone 13 Pro Max (A15) and to make problem reports easy. Tested on an iPhone 13 Pro Max: the graphics error is gone and the IW4 Pocket options work, but the app still runs out of memory while the map prepares its graphics (see Known).",
+          "minOSVersion": "15.0",
+          "sha256": "74bde349411611e92d7060e62ae28fe5440238b72a294690454ca57c94c8f5da"
+        },
+        {
+          "version": "0.3.2",
+          "buildVersion": "14",
+          "date": "2026-10-10T09:37:22Z",
+          "size": 38827269,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.2/IW4.Pocket.ipa",
+          "localizedDescription": "Built to find out where the memory goes and why the app quits after loading mp_rust. It is not a fix, and it has not been run on a phone yet (the package was checked, the game was not).",
+          "minOSVersion": "15.0",
+          "sha256": "4a9ef262bb7b2502fa5784676e49baaf53d4a8289e5af631bdf62ef5efe0d067"
+        },
+        {
+          "version": "0.3.0",
+          "buildVersion": "12",
+          "date": "2026-10-07T13:59:57Z",
+          "size": 38761494,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.0/IW4.Pocket.ipa",
+          "localizedDescription": "The app now looks at the phone and picks its own memory settings. This is the biggest change since 0.2.0.",
+          "minOSVersion": "15.0",
+          "sha256": "798423f50af0084c9d5a512089fd9d18c1555be655e4bb9c6811dcbdfdfee2d2"
+        },
+        {
+          "version": "0.2.1",
+          "buildVersion": "11",
+          "date": "2026-10-07T06:39:47Z",
+          "size": 38763755,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.2.1/IW4.Pocket.ipa",
+          "localizedDescription": "This candidate changes memory ownership and shader scheduling, not just diagnostics.",
+          "minOSVersion": "15.0",
+          "sha256": "cce622fe0d7f94b6a29079bc096b9f3adb843ce47aa20e27a39cbe063d75428b"
+        },
+        {
+          "version": "0.2.0",
+          "buildVersion": "10",
+          "date": "2026-10-06T23:58:25Z",
+          "size": 38751388,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.2.0/IW4.Pocket.ipa",
+          "localizedDescription": "TEST 0.2.0 — Experimental prerelease. Not verified on a phone. No confirmed fix for the memory crash. Unofficial iOS port of [IW4L](https://github.com/vladtrc/iw4L), the open-source Rust runtime for Modern Warfare 2 (2009).",
+          "minOSVersion": "15.0",
+          "sha256": "ba5737efd12c34df25ae4f2bfdc8871556adbebb8c00580d3f904f466e051661"
+        },
+        {
+          "version": "0.1.9",
+          "buildVersion": "9",
+          "date": "2026-10-06T13:58:12Z",
+          "size": 32765223,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.1.9/IW4.Pocket.ipa",
+          "localizedDescription": "Unofficial iOS port of [IW4L](https://github.com/vladtrc/iw4L), the open-source Rust runtime for Modern Warfare 2 (2009).",
+          "minOSVersion": "15.0",
+          "sha256": "159a8f296a301fdc62cca2f42a9436b5dffab21566bef7ccc5b6ddf344505384"
+        },
+        {
+          "version": "0.1.8",
+          "buildVersion": "8",
+          "date": "2026-10-06T06:24:06Z",
+          "size": 32763996,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.1.8/IW4.Pocket.ipa",
+          "localizedDescription": "Unofficial iOS port of [IW4L](https://github.com/vladtrc/iw4L), the open-source Rust runtime for Modern Warfare 2 (2009).",
+          "minOSVersion": "15.0",
+          "sha256": "4f607412cdecd1246ac1a56731783a78d80bae130fa8a2fa932a89900b4a0bb3"
         }
       ]
     }

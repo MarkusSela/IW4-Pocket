@@ -42,7 +42,7 @@ class SourceTests(unittest.TestCase):
     def generate(self, releases):
         return source.build_source(releases, load_bytes=self.blobs.__getitem__)["apps"][0]
 
-    def test_channels_use_ipa_identity_not_tag_and_keep_stable_legacy_default(self):
+    def test_every_verified_release_is_listed_newest_first_by_ipa_identity(self):
         releases = [self.fixture("v0.3.7b", "0.3.7", "20", True),
                     self.fixture("v0.3.6", "0.3.6", "18"),
                     self.fixture("v0.3.7c", "0.3.7", "21", True)]
@@ -52,49 +52,53 @@ class SourceTests(unittest.TestCase):
         self.assertNotIn("version", result)  # Do not opt into source schema v2.
         app = result["apps"][0]
         self.assertEqual(app["bundleIdentifier"], "com.markussela.iw4l")
-        tracks = {c["track"]: c["releases"] for c in app["releaseChannels"]}
-        self.assertEqual(set(tracks), {"stable", "nightly"})
-        self.assertEqual(app["versions"], tracks["stable"])
-        self.assertEqual([(v["version"], v["buildVersion"]) for v in app["versions"]], [("0.3.6", "18")])
-        self.assertEqual([(v["version"], v["buildVersion"]) for v in tracks["nightly"]], [("0.3.7", "21"), ("0.3.7", "20")])
-        newest = tracks["nightly"][0]
+        self.assertNotIn("releaseChannels", app)  # nothing hides behind a beta switch
+        self.assertEqual([(v["version"], v["buildVersion"]) for v in app["versions"]],
+                         [("0.3.7", "21"), ("0.3.7", "20"), ("0.3.6", "18")])
+        newest = app["versions"][0]
         self.assertIn("TEST 0.3.7c", newest["localizedDescription"])
         self.assertIn("v0.3.7c/", newest["downloadURL"])
+        self.assertNotIn("TEST", app["versions"][2]["localizedDescription"])
         self.assertEqual(newest["minOSVersion"], "15.0")
         self.assertEqual(newest["sha256"], releases[2]["assets"][0]["digest"][7:])
 
-    def test_old_releases_drafts_and_missing_ipa_are_not_loaded(self):
+    def test_stable_and_test_releases_both_appear_even_when_stable_is_newer(self):
+        releases = [self.fixture("v0.3.7c", "0.3.7", "21", True),
+                    self.fixture("v0.3.8", "0.3.8", "22")]
+        app = self.generate(releases)
+        self.assertEqual([v["buildVersion"] for v in app["versions"]], ["22", "21"])
+
+    def test_drafts_missing_ipa_and_unloadable_old_releases_are_not_listed(self):
         stable = self.fixture("v0.3.6", "0.3.6", "18")
-        stale = [release("v0.3.4"), release("v0.3.5c", True)]
+        stale = [release("v0.3.4"), release("v0.3.5c", True)]  # IPA cannot be loaded
         draft = release("v0.3.9", True)
         draft["draft"] = True
         missing = release("v0.4.0")
         missing["assets"] = []
-        app = self.generate(stale + [draft, missing, stable])
-        self.assertEqual(app["releaseChannels"], [{"track": "stable", "releases": app["versions"]}])
+        with contextlib.redirect_stderr(io.StringIO()) as warnings:
+            app = self.generate(stale + [draft, missing, stable])
+        self.assertEqual([v["version"] for v in app["versions"]], ["0.3.6"])
+        self.assertIn("Skipping unverified", warnings.getvalue())
 
-    def test_no_valid_test_keeps_stable_fallback(self):
+    def test_invalid_test_is_skipped_and_stable_stays(self):
         stable = self.fixture("v0.3.6", "0.3.6", "18")
         invalid = self.fixture("v0.3.7c", "0.3.7", "21", True, "wrong.bundle")
         with contextlib.redirect_stderr(io.StringIO()) as warnings:
             app = self.generate([stable, invalid])
         self.assertIn("Skipping unverified TEST v0.3.7c", warnings.getvalue())
-        self.assertEqual([c["track"] for c in app["releaseChannels"]], ["stable"])
-        self.assertEqual(app["versions"][0]["version"], "0.3.6")
+        self.assertEqual([v["version"] for v in app["versions"]], ["0.3.6"])
 
-    def test_no_stable_uses_newest_verified_test_by_numeric_build_not_tag(self):
+    def test_without_stable_tests_are_ordered_by_numeric_build_not_tag(self):
         releases = [self.fixture("v0.3.7z", "0.3.7", "9", True),
                     self.fixture("v0.3.7a", "0.3.7", "21", True)]
         app = self.generate(releases)
-        self.assertEqual(app["versions"][0]["buildVersion"], "21")
-        self.assertEqual([v["buildVersion"] for v in app["releaseChannels"][0]["releases"]], ["21", "9"])
-        self.assertEqual(app["releaseChannels"][0]["track"], "nightly")
+        self.assertEqual([v["buildVersion"] for v in app["versions"]], ["21", "9"])
 
-    def test_newer_tag_with_old_ipa_is_not_a_newer_test(self):
+    def test_tag_does_not_decide_the_order_the_ipa_does(self):
         stable = self.fixture("v0.3.6", "0.3.6", "18")
-        stale = self.fixture("v0.3.7c", "0.3.5", "21", True)
-        app = self.generate([stable, stale])
-        self.assertEqual([c["track"] for c in app["releaseChannels"]], ["stable"])
+        odd = self.fixture("v0.3.7c", "0.3.5", "21", True)
+        app = self.generate([stable, odd])
+        self.assertEqual([v["version"] for v in app["versions"]], ["0.3.6", "0.3.5"])
 
     def test_report_cargo_version_is_not_ipa_short_version(self):
         rel = self.fixture("v0.3.7c", "0.3.7", "021", True)

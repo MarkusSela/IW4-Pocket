@@ -49,9 +49,9 @@ No hace falta saber programar. Lleva unos 15 minutos más la copia de archivos.
 
 ### Estable o TEST en SideStore
 
-Añade la fuente con el botón de arriba y actualízala en SideStore. Es **una sola app**, no dos instalaciones estable/test. Para las TEST, abre **Settings > Enable Beta Updates** en SideStore (ajuste global), selecciona **nightly** si aparece y actualiza la fuente. Con las betas desactivadas se ofrece la estable; desactivarlas no baja automáticamente de versión una nightly instalada. Los clientes antiguos sin canales solo ven la estable.
+Añade la fuente con el botón de arriba y actualízala en SideStore. Es **una sola app**, no dos instalaciones estable/test. La fuente lista **todas las versiones**, estables y TEST, de la más reciente a la más antigua; elige la que quieras en SideStore. Las TEST llevan **TEST** en la descripción. No hace falta ningún ajuste beta. La entrada más reciente puede ser una TEST: es experimental y no se ha confirmado que el fallo de memoria esté resuelto.
 
-La interfaz puede mostrar `0.3.7 (21)`; las notas la identifican como **TEST 0.3.7c**. Los pasos siguen el contrato de la fuente SideStore, pero no se han verificado en un teléfono. Las TEST son experimentales; no se ha confirmado que el fallo de memoria esté resuelto. **No desinstales**: actualiza sobre la app existente para conservar los archivos del juego.
+La interfaz muestra la versión y el build de la app, por ejemplo `0.3.8 (22)`. **No desinstales**: actualiza sobre la app existente para conservar los archivos del juego. Estos pasos no se han verificado en un teléfono.
 
 ## 📱 ¿Funcionará en mi dispositivo?
 

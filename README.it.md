@@ -49,9 +49,9 @@ Non serve saper programmare. Ci vogliono circa 15 minuti più la copia dei file.
 
 ### Stabile o TEST in SideStore
 
-Aggiungi la sorgente con il pulsante sopra, poi aggiornala in SideStore. È **un'unica app**, non due installazioni stabile/test. Per le TEST, apri **Settings > Enable Beta Updates** in SideStore (impostazione globale), seleziona il canale **nightly** se visibile e aggiorna la sorgente. Con le beta disattivate la sorgente propone la stabile; disattivarle non esegue automaticamente il downgrade di una nightly installata. I client precedenti senza supporto ai canali vedono solo la stabile.
+Aggiungi la sorgente con il pulsante sopra, poi aggiornala in SideStore. È **un'unica app**, non due installazioni stabile/test. La sorgente elenca **tutte le uscite**, stabili e TEST, dalla più recente; scegli quella che vuoi in SideStore. Le TEST sono indicate con **TEST** nella descrizione. Non serve nessuna impostazione beta. La voce più recente può essere una TEST: è sperimentale e il crash di memoria non è confermato risolto.
 
-La UI può mostrare `0.3.7 (21)`; le note la identificano come **TEST 0.3.7c**. I passaggi seguono il contratto della sorgente SideStore, ma non sono stati verificati su un telefono. Le TEST sono sperimentali; il crash di memoria non è confermato risolto. **Non disinstallare**: aggiorna sopra l'app esistente per conservare i file di gioco.
+L'interfaccia mostra versione e build dell'app, per esempio `0.3.8 (22)`. **Non disinstallare**: aggiorna sopra l'app esistente per conservare i file di gioco. Questi passaggi non sono stati verificati su un telefono.
 
 ## 📱 Funzionerà sul mio dispositivo?
 

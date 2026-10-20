@@ -49,9 +49,9 @@ No coding needed. It takes about 15 minutes plus the file copy.
 
 ### Stable or TEST in SideStore
 
-Add the source using the button above, then refresh it in SideStore. This is **one app**, not separate stable/test installs. For TEST builds, open SideStore **Settings > Enable Beta Updates** (a global setting), select the **nightly** track if shown, and refresh the source. With beta updates off, the source defaults to stable; turning them off does not automatically downgrade an installed nightly. Older clients without channel support see only stable.
+Add the source using the button above, then refresh it in SideStore. This is **one app**, not separate stable/test installs. The source lists **every release**, stable and TEST, newest first; pick the one you want in SideStore. TEST releases are labelled **TEST** in their description. No beta setting is needed. The newest entry may be a TEST: it is experimental and the memory crash is not confirmed fixed.
 
-The UI may show `0.3.7 (21)`; the notes identify it as **TEST 0.3.7c**. These steps follow the SideStore source contract, but have not been verified on a phone. TEST builds are experimental; the memory crash is not confirmed fixed. **Do not uninstall**: update over the existing app to keep game files.
+The UI shows the app version and build, for example `0.3.8 (22)`. **Do not uninstall**: update over the existing app to keep game files. These steps have not been verified on a phone.
 
 ## 📱 Will it work on my device?
 

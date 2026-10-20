@@ -49,9 +49,9 @@ Keine Programmierkenntnisse nötig. Etwa 15 Minuten plus das Kopieren der Dateie
 
 ### Stable oder TEST in SideStore
 
-Füge die Quelle über den Button oben hinzu und aktualisiere sie in SideStore. Es ist **eine einzige App**, keine getrennten Stable-/Test-Installationen. Öffne für TEST-Builds in SideStore **Settings > Enable Beta Updates** (globale Einstellung), wähle **nightly**, falls angezeigt, und aktualisiere die Quelle. Ohne Beta-Updates wird Stable angeboten; das Abschalten stuft eine installierte Nightly nicht automatisch zurück. Ältere Clients ohne Kanalunterstützung sehen nur Stable.
+Füge die Quelle über den Button oben hinzu und aktualisiere sie in SideStore. Es ist **eine einzige App**, keine getrennten Stable-/Test-Installationen. Die Quelle listet **alle Veröffentlichungen**, Stable und TEST, die neueste zuerst; wähle in SideStore die gewünschte. TEST-Versionen sind in der Beschreibung mit **TEST** gekennzeichnet. Eine Beta-Einstellung ist nicht nötig. Der neueste Eintrag kann eine TEST sein: sie ist experimentell, und die Behebung des Speicherabsturzes ist nicht bestätigt.
 
-Die Oberfläche kann `0.3.7 (21)` anzeigen; die Hinweise nennen **TEST 0.3.7c**. Diese Schritte folgen dem SideStore-Quellformat, wurden aber nicht auf einem Telefon geprüft. TEST-Builds sind experimentell; die Behebung des Speicherabsturzes ist nicht bestätigt. **Nicht deinstallieren**: über die vorhandene App installieren, damit die Spieldateien erhalten bleiben.
+Die Oberfläche zeigt Version und Build der App, zum Beispiel `0.3.8 (22)`. **Nicht deinstallieren**: über die vorhandene App installieren, damit die Spieldateien erhalten bleiben. Diese Schritte wurden nicht auf einem Telefon geprüft.
 
 ## 📱 Läuft es auf meinem Gerät?
 

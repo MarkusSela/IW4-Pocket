@@ -49,9 +49,9 @@ Aucune programmation nécessaire. Comptez environ 15 minutes plus la copie des f
 
 ### Stable ou TEST dans SideStore
 
-Ajoutez la source avec le bouton ci-dessus, puis actualisez-la dans SideStore. C'est **une seule app**, pas deux installations stable/test. Pour les TEST, ouvrez **Settings > Enable Beta Updates** dans SideStore (réglage global), sélectionnez **nightly** si proposé et actualisez la source. Sans les bêtas, la source propose la stable ; les désactiver ne rétrograde pas automatiquement une nightly installée. Les anciens clients sans canaux ne voient que la stable.
+Ajoutez la source avec le bouton ci-dessus, puis actualisez-la dans SideStore. C'est **une seule app**, pas deux installations stable/test. La source liste **toutes les versions**, stables et TEST, de la plus récente à la plus ancienne ; choisissez celle que vous voulez dans SideStore. Les TEST sont signalées par **TEST** dans leur description. Aucun réglage bêta n'est nécessaire. L'entrée la plus récente peut être une TEST : elle est expérimentale et la correction du plantage mémoire n'est pas confirmée.
 
-L'interface peut afficher `0.3.7 (21)` ; les notes l'identifient comme **TEST 0.3.7c**. Ces étapes suivent le contrat de source SideStore, mais n'ont pas été vérifiées sur un téléphone. Les TEST sont expérimentales ; la correction du plantage mémoire n'est pas confirmée. **Ne désinstallez pas** : installez par-dessus l'app existante pour conserver les fichiers du jeu.
+L'interface affiche la version et le build de l'app, par exemple `0.3.8 (22)`. **Ne désinstallez pas** : installez par-dessus l'app existante pour conserver les fichiers du jeu. Ces étapes n'ont pas été vérifiées sur un téléphone.
 
 ## 📱 Est-ce que ça marchera sur mon appareil ?
 

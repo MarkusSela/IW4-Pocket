@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Regenerate the SideStore/AltStore source: one app, stable and nightly tracks.
+"""Regenerate the SideStore/AltStore source: one app, every verified release.
 
-Legacy `versions` contains only the newest stable (or newest test if no stable
-exists). Tags label release notes/URLs, never IPA versions. Info.plist inside the
-published IPA is authoritative; older verification reports contain Cargo versions.
+`versions` lists every published release that carries a verifiable IPA, stable and
+TEST (pre-release) alike, newest first. There are no release channels, so nothing
+depends on a SideStore beta switch. Tags label release notes/URLs, never IPA
+versions. Info.plist inside the published IPA is authoritative; older verification
+reports contain Cargo versions. The newest stable release must always verify; an
+older release that cannot be verified is skipped with a warning.
 Run from the repository root: python3 tools/gen_source.py
 """
 import hashlib
@@ -36,17 +39,6 @@ def order_key(version):
     if not match:
         raise ValueError(f"Unsupported release tag: {version}")
     return (*map(int, match.group(1, 2, 3)), match[4])
-
-
-def pick(candidates):
-    """Keep newest stable and newer tests; metadata decides nightly ordering."""
-    stable = sorted((c for c in candidates if not c["test"]),
-                    key=lambda c: order_key(c["tag"]), reverse=True)
-    tests = [c for c in candidates if c["test"]]
-    if not stable:
-        return tests
-    newest = stable[0]
-    return [newest] + [c for c in tests if order_key(c["tag"]) > order_key(newest["tag"])]
 
 
 def ipa_metadata(data):
@@ -111,27 +103,29 @@ def build_source(releases, load_bytes=get_bytes):
         ipa = next((a for a in rel["assets"] if a["name"] == "IW4.Pocket.ipa"), None)
         if ipa is not None and not rel["draft"]:
             by_tag[rel["tag_name"]] = (rel, ipa)
-    chosen = pick([{"tag": tag, "test": rel["prerelease"]}
-                   for tag, (rel, _) in by_tag.items()])
-    stable, nightly = [], []
-    for candidate in chosen:
-        rel, ipa = by_tag[candidate["tag"]]
-        try:
-            version = release_version(rel, ipa, load_bytes)
-        except (ValueError, KeyError, OSError, zipfile.BadZipFile) as exc:
-            if not rel["prerelease"]:
-                raise ValueError(f"Cannot verify stable {rel['tag_name']}: {exc}") from exc
-            print(f"Skipping unverified TEST {rel['tag_name']}: {exc}", file=sys.stderr)
+    stable_tags = []
+    for tag, (rel, _) in by_tag.items():
+        if rel["prerelease"]:
             continue
-        (nightly if rel["prerelease"] else stable).append(version)
-    nightly.sort(key=release_key, reverse=True)
-    if stable:
-        nightly = [v for v in nightly if release_key(v)[:2] > release_key(stable[0])[:2]]
-    if not stable and not nightly:
+        try:
+            order_key(tag)
+        except ValueError as exc:
+            print(f"Skipping release with unsupported tag: {exc}", file=sys.stderr)
+            continue
+        stable_tags.append(tag)
+    newest_stable = max(stable_tags, key=order_key, default=None)
+    versions = []
+    for tag, (rel, ipa) in by_tag.items():
+        try:
+            versions.append(release_version(rel, ipa, load_bytes))
+        except (ValueError, KeyError, OSError, zipfile.BadZipFile) as exc:
+            if tag == newest_stable:
+                raise ValueError(f"Cannot verify stable {tag}: {exc}") from exc
+            kind = "TEST" if rel["prerelease"] else "release"
+            print(f"Skipping unverified {kind} {tag}: {exc}", file=sys.stderr)
+    versions.sort(key=release_key, reverse=True)
+    if not versions:
         raise ValueError("No verified IPA releases; source was not regenerated")
-    channels = [{"track": "stable", "releases": stable}] if stable else []
-    if nightly:
-        channels.append({"track": "nightly", "releases": nightly})
     source = {
         "name": "IW4 Pocket",
         "identifier": "com.markussela.iw4l.source",
@@ -149,8 +143,7 @@ def build_source(releases, load_bytes=get_bytes):
             "iconURL": f"{RAW}/ios/icons/AppIcon-1024.png",
             "tintColor": "#2f3a2f",
             "category": "games",
-            "versions": stable or nightly[:1],
-            "releaseChannels": channels,
+            "versions": versions,
         }],
         "news": [],
     }
@@ -163,5 +156,4 @@ if __name__ == "__main__":
     with open("source.json", "w", encoding="utf-8") as out:
         json.dump(source, out, indent=2, ensure_ascii=False)
         out.write("\n")
-    for channel in source["apps"][0]["releaseChannels"]:
-        print(channel["track"], [(v["version"], v["buildVersion"]) for v in channel["releases"]])
+    print("versions", [(v["version"], v["buildVersion"]) for v in source["apps"][0]["versions"]])
