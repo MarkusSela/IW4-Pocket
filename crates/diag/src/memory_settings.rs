@@ -245,8 +245,10 @@ pub fn valid_file_setting(name: &str, value: &str) -> bool {
         // 1 = do not prepare weapon camouflage skins (saves memory; guns lose their camos).
         "IW4L_SKIP_CAMO" => matches!(value, "0" | "1"),
         "IW4L_TOUCH_CONTROLS" => matches!(value, "0" | "1"),
-        // Log detail (see detail.rs): normal drops per-frame/per-tick lines.
-        crate::detail::DIAG_ENV => matches!(value, "normal" | "detailed"),
+        // Log detail (see detail.rs, `DIAG_ENV`): normal drops per-frame/per-tick lines.
+        // A literal, not the constant: CI compiles this file on its own (`rustc --test`),
+        // so it cannot reach other modules of the crate.
+        "IW4L_DIAG" => matches!(value, "normal" | "detailed"),
         // Text/UI sharpness (bootstrap::text_sharpness) and selective weapon loading
         // (assets::weapon_residency::config); same values their parsers accept.
         "IW4L_TEXT_SHARPNESS" => matches!(value, "auto" | "off" | "native" | "high" | "medium"),
