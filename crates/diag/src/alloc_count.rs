@@ -181,6 +181,7 @@ unsafe extern "C" {
 /// drops allocator caches, it never invalidates a live pointer.
 pub fn release_freed_heap_report() -> (std::time::Duration, u64) {
     let at = std::time::Instant::now();
+    #[cfg_attr(not(target_os = "ios"), allow(unused_mut))]
     let mut released = 0u64;
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     {

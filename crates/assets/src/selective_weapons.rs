@@ -321,7 +321,14 @@ static LAST_PLAN: Mutex<Option<(u64, Option<Arc<Selection>>)>> = Mutex::new(None
 fn plan_signature(registry: &WeaponRegistry, classes: &[ClassRequest]) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for (_, deps) in registry.iter() {
+        // Names AND the models/animations they pull in: a catalog that keeps the names but
+        // changes what a weapon needs must not reuse a stale plan.
         deps.weapon.hash(&mut hasher);
+        deps.gun_xmodels.hash(&mut hasher);
+        deps.hand_xmodels.hash(&mut hasher);
+        deps.world_xmodels.hash(&mut hasher);
+        deps.projectile_xmodels.hash(&mut hasher);
+        deps.xanims.hash(&mut hasher);
     }
     for class in classes {
         format!("{class:?}").hash(&mut hasher);
