@@ -60,7 +60,7 @@ OPTIONS = [
      ("Normal keeps the log short: no per-frame or bot detail.", "Detailed writes everything, for bug reports."),
      [("Auto", "auto"), ("Normal", "normal"), ("Detailed", "detailed")]),
     ("ui_pocket_sharp", "Text/UI sharpness",
-     ("Experimental. Only works below 3D scale 0.6.", "If the screen goes black, set Off."),
+     ("Auto is Medium: sharp text and menus when the 3D scale", "is below 0.6. If the screen goes black, set Off."),
      [("Auto", "auto"), ("Off", "off"), ("Native", "native"), ("High", "high"), ("Medium", "medium")]),
     ("ui_pocket_weapons", "Selective weapon loading",
      ("Auto loads only the weapons in use on Low memory.", "Off loads every weapon (more memory)."),

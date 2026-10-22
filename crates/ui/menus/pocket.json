@@ -2241,7 +2241,7 @@
     "name": "video_display_mode_label",
     "fields": {
      "vis_exp": "1",
-     "text_key": "Experimental. Only works below 3D scale 0.6.",
+     "text_key": "Auto is Medium: sharp text and menus when the 3D scale",
      "rect": {
       "x": 232,
       "y": 259,
@@ -2262,7 +2262,7 @@
     "name": "video_display_mode_label",
     "fields": {
      "vis_exp": "1",
-     "text_key": "If the screen goes black, set Off.",
+     "text_key": "is below 0.6. If the screen goes black, set Off.",
      "rect": {
       "x": 232,
       "y": 268,

@@ -7,11 +7,11 @@
 //! Ordering: `blit_scene` runs in [`SceneBlitSet`]; `draw_sun_effects` is
 //! ordered `.after(SceneBlitSet)` so the sun is drawn on the stretched image.
 //!
-//! Limitation (opt-in only): the scene depth keeps the full size while the
-//! colour scene sits in the top-left area until the blit, so depth-based
-//! effects after the blit (DOF, floatz, sun occlusion) can be misaligned
-//! while separation is active. Work-around: leave the sharpness mode on
-//! Off/Auto (no separation).
+//! Limitation: the scene depth keeps the full size while the colour scene sits
+//! in the top-left area until the blit, so depth-based effects after the blit
+//! (DOF, floatz, sun occlusion) can be misaligned while separation is active.
+//! Separation is on by default below a 3D scale of 0.6 (Auto = Medium).
+//! Work-around: set the sharpness mode to Off (no separation).
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 

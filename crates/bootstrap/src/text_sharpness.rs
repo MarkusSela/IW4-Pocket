@@ -2,14 +2,18 @@
 //! resolution of the window (UI, HUD, text).
 //!
 //! `IW4L_TEXT_SHARPNESS=auto|off|native|high|medium` (default `auto`; unknown
-//! values warn and fall back to `auto`). Menu text (IT): "Nitidezza testo/UI:
-//! Auto/Nativa/Alta/Media".
+//! values warn and fall back to `auto`). Auto IS Medium: the menu must say what
+//! it does, and the only way back to the old single-resolution window is Off.
+//! Menu text (IT): "Nitidezza testo/UI: Auto/Nativa/Alta/Media".
 //!
 //! Given the 3D render scale `s` (`IW4L_RENDER_SCALE`), the UI scale `u` is:
 //! - Native: 1.0 (window at the screen's own resolution);
 //! - High:   max(s, 0.75);
 //! - Medium: max(s, 0.5);
-//! - Auto:   unchanged (u = s) in this build; the separation is opt-in.
+//! - Auto:   same as Medium (the default);
+//! - Off:    unchanged (u = s), the whole window at the 3D scale.
+//!
+//! Nothing changes at a 3D scale of 0.6 or more: there the UI is already sharp.
 //!
 //! The scene scale relative to the UI surface is `s / u` (<= 1.0).
 #![cfg_attr(not(target_os = "ios"), allow(dead_code))]
@@ -21,9 +25,10 @@ const MIN_SIDE: u32 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(crate) enum SharpnessMode {
+    /// Default. Behaves exactly like `Medium`.
     #[default]
     Auto,
-    /// Escape hatch: today's behaviour (whole window at the 3D scale).
+    /// Escape hatch: the old behaviour (whole window at the 3D scale).
     Off,
     Native,
     High,
@@ -48,7 +53,7 @@ impl SharpnessMode {
             Ok(value) => Self::parse(&value).unwrap_or_else(|| {
                 diag::warn!(
                     Launch,
-                    "text sharpness: {TEXT_SHARPNESS_ENV}={value} is not auto|off|native|high|medium, using auto"
+                    "text sharpness: {TEXT_SHARPNESS_ENV}={value} is not auto|off|native|high|medium, using auto (medium)"
                 );
                 Self::Auto
             }),
@@ -78,9 +83,9 @@ fn side(native: u32, scale: f64) -> u32 {
 
 /// The 3D / UI separation is wired (render_gpu `scene_split`: scene drawn in the
 /// top-left scene-size area, then linearly stretched over the whole window
-/// before post-fx and the HUD). It applies ONLY to an explicit Native / High /
-/// Medium mode with a 3D scale below `SEPARATION_BELOW`. Auto (default) and Off
-/// keep today's behaviour: the whole window at the 3D scale.
+/// before post-fx and the HUD). It applies to Native / High / Medium and to Auto (= Medium)
+/// when the 3D scale is below `SEPARATION_BELOW`. Off keeps the old behaviour: the whole
+/// window at the 3D scale.
 pub(crate) const SEPARATION_WIRED: bool = true;
 
 /// Scene below this 3D scale is the only case the separation applies to.
@@ -90,7 +95,7 @@ const SEPARATION_BELOW: f64 = 0.6;
 fn ui_scale_for(mode: SharpnessMode, scale3d: f64, wired: bool) -> f64 {
     let s = if !scale3d.is_finite() {
         1.0
-    } else if matches!(mode, SharpnessMode::Auto | SharpnessMode::Off) {
+    } else if matches!(mode, SharpnessMode::Off) {
         scale3d
     } else {
         scale3d.clamp(0.2, 1.0)
@@ -99,10 +104,10 @@ fn ui_scale_for(mode: SharpnessMode, scale3d: f64, wired: bool) -> f64 {
         return s;
     }
     match mode {
-        SharpnessMode::Off | SharpnessMode::Auto => s,
+        SharpnessMode::Off => s,
         SharpnessMode::Native => 1.0,
         SharpnessMode::High => s.max(0.75),
-        SharpnessMode::Medium => s.max(0.5),
+        SharpnessMode::Medium | SharpnessMode::Auto => s.max(0.5),
     }
 }
 
@@ -112,8 +117,8 @@ pub(crate) fn select(mode: SharpnessMode, native: (u32, u32), scale3d: f64) -> T
 }
 
 fn select_with(mode: SharpnessMode, native: (u32, u32), scale3d: f64, wired: bool) -> TextSharpness {
-    // Auto/Off: exactly today's value (no clamp); callers already reject <0.2.
-    let passthrough = matches!(mode, SharpnessMode::Auto | SharpnessMode::Off);
+    // Off: exactly the old value (no clamp); callers already reject <0.2.
+    let passthrough = matches!(mode, SharpnessMode::Off);
     let s = if !scale3d.is_finite() {
         1.0
     } else if passthrough {
@@ -147,7 +152,7 @@ mod tests {
         for m in [SharpnessMode::Auto, SharpnessMode::Off, SharpnessMode::Native, SharpnessMode::High, SharpnessMode::Medium] {
             for s in [0.2, 0.5, 0.6, 0.9, 1.0] {
                 let r = select(m, N, s);
-                if matches!(m, SharpnessMode::Off | SharpnessMode::Auto) || !SEPARATION_WIRED || s >= 0.6 {
+                if matches!(m, SharpnessMode::Off) || !SEPARATION_WIRED || s >= 0.6 {
                     assert_eq!(r.ui_size, r.scene_size, "{m:?} {s}");
                     assert!((r.scene_scale - 1.0).abs() < 1e-9);
                 }
@@ -157,13 +162,34 @@ mod tests {
     }
 
     #[test]
-    fn auto_and_off_keep_today_behaviour() {
-        for m in [SharpnessMode::Auto, SharpnessMode::Off] {
-            for s in [0.2, 0.3, 0.5, 0.6, 1.0] {
-                let r = select_with(m, N, s, true);
-                assert_eq!(r.ui_size, r.scene_size, "{m:?} {s}");
-            }
+    fn off_keeps_the_old_single_resolution_behaviour() {
+        for s in [0.2, 0.3, 0.5, 0.6, 1.0] {
+            let r = select_with(SharpnessMode::Off, N, s, true);
+            assert_eq!(r.ui_size, r.scene_size, "off {s}");
+            assert!((r.scene_scale - 1.0).abs() < 1e-9);
         }
+    }
+
+    #[test]
+    fn auto_is_medium_everywhere() {
+        // The menu shows "Auto"; what it does must be exactly Medium, for every scale.
+        for s in [0.0, 0.2, 0.3, 0.5, 0.59, 0.6, 0.9, 1.0, 5.0, f64::NAN] {
+            assert_eq!(
+                select_with(SharpnessMode::Auto, N, s, true).ui_size,
+                select_with(SharpnessMode::Medium, N, s, true).ui_size,
+                "ui {s}"
+            );
+            assert_eq!(
+                select_with(SharpnessMode::Auto, N, s, true).scene_size,
+                select_with(SharpnessMode::Medium, N, s, true).scene_size,
+                "scene {s}"
+            );
+        }
+        // The default (variable unset) is Auto, so a fresh install gets Medium.
+        assert_eq!(SharpnessMode::default(), SharpnessMode::Auto);
+        let r = select_with(SharpnessMode::default(), N, 0.3, true);
+        assert_eq!(r.ui_size, (1434, 660));
+        assert_eq!(r.scene_size, (860, 396));
     }
 
     #[test]

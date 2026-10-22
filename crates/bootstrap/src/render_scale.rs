@@ -9,9 +9,9 @@
 //! the screen. Window sizes in points, and with them the menus and the HUD
 //! layout, stay as they were.
 //!
-//! # 3D / UI separation ("Nitidezza testo/UI") - STATE: WIRED (explicit Native/High/Medium and 3D scale < 0.6 only)
+//! # 3D / UI separation ("Nitidezza testo/UI") - STATE: WIRED (Auto = Medium, Native/High/Medium; 3D scale < 0.6 only)
 //! `text_sharpness::select` returns the 3D size and the UI size; they differ
-//! only for an explicit mode with 3D scale < 0.6 (Auto/Off: same, as before).
+//! only with 3D scale < 0.6 and a mode other than Off (Off: same size, the old behaviour).
 //! The window takes the UI size, `render_gpu::set_scene_size_override` the 3D
 //! size: colour pass viewport, projection and 2D command-buffer constants use
 //! it, `scene_split::blit_scene` upscales it before post-fx / HUD. Notes:

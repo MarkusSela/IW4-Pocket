@@ -13,8 +13,9 @@
 - Options > Selective weapon loading > Off restores full loading (`IW4L_SELECTIVE_WEAPONS=off`).
 
 ## Text/UI sharpness
-- Only active when you pick Native, High or Medium **and** the 3D scale is below 0.6. Auto and Off behave as before.
-- Experimental: it may show a black screen. If it does, set it to Off.
+- Auto is Medium: menus, HUD and text are drawn at half resolution or better while the 3D scene stays at your render scale. It only does something when the 3D scale is below 0.6; at 0.6 or more nothing changes.
+- Native and High are sharper but use more memory. Off restores the old behaviour (everything at the 3D scale).
+- Experimental: if the screen goes black, set it to Off.
 - Font atlases are exempt from the texture cap.
 - The new settings are rows in the IW4 Pocket options menu (now 8 + 8 rows over two pages).
 
