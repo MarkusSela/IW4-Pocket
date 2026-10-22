@@ -53,6 +53,9 @@ class Contract(unittest.TestCase):
         self.assertLess(verify, wf.index("gh release create"))
         self.assertIn("--profile ios", wf)
         self.assertIn("$GITHUB_SHA", wf)
+        # The SideStore source logic is protected by its own tests, run before the build.
+        self.assertIn("python3 tools/test_gen_source.py", wf)
+        self.assertLess(wf.index("python3 tools/test_gen_source.py"), wf.index("cargo build"))
 
     def test_no_secret_shaped_strings(self):
         pattern = re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}")

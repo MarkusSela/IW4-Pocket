@@ -19,6 +19,7 @@ jobs:
       - name: Test memory controls and package contracts
         run: |
           python3 tools/test_ios_memory_contract.py
+          python3 tools/test_gen_source.py
           rustc --edition=2024 --test crates/diag/src/memory_settings.rs -o /tmp/memory-settings-tests
           /tmp/memory-settings-tests
       - uses: actions/cache@v4
