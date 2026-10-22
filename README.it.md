@@ -51,7 +51,7 @@ Non serve saper programmare. Ci vogliono circa 15 minuti più la copia dei file.
 
 Aggiungi la sorgente con il pulsante sopra, poi aggiornala in SideStore. È **un'unica app**, non due installazioni stabile/test. La sorgente elenca **tutte le uscite**, stabili e TEST, dalla più recente; scegli quella che vuoi in SideStore. Le TEST sono indicate con **TEST** nella descrizione. Non serve nessuna impostazione beta. La voce più recente può essere una TEST: è sperimentale e il crash di memoria non è confermato risolto.
 
-L'interfaccia mostra versione e build dell'app, per esempio `0.3.8 (22)`. **Non disinstallare**: aggiorna sopra l'app esistente per conservare i file di gioco. Questi passaggi non sono stati verificati su un telefono.
+L'interfaccia mostra versione e build dell'app, per esempio `0.3.9 (23)`. **Non disinstallare**: aggiorna sopra l'app esistente per conservare i file di gioco. Questi passaggi non sono stati verificati su un telefono.
 
 ## 📱 Funzionerà sul mio dispositivo?
 

@@ -51,7 +51,7 @@ No coding needed. It takes about 15 minutes plus the file copy.
 
 Add the source using the button above, then refresh it in SideStore. This is **one app**, not separate stable/test installs. The source lists **every release**, stable and TEST, newest first; pick the one you want in SideStore. TEST releases are labelled **TEST** in their description. No beta setting is needed. The newest entry may be a TEST: it is experimental and the memory crash is not confirmed fixed.
 
-The UI shows the app version and build, for example `0.3.8 (22)`. **Do not uninstall**: update over the existing app to keep game files. These steps have not been verified on a phone.
+The UI shows the app version and build, for example `0.3.9 (23)`. **Do not uninstall**: update over the existing app to keep game files. These steps have not been verified on a phone.
 
 ## 📱 Will it work on my device?
 
