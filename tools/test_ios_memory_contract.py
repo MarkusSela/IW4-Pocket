@@ -64,6 +64,13 @@ class Contract(unittest.TestCase):
         self.assertLess(wf.index("tools/test_gen_source.py"), wf.index("tools/gen_source.py"))
         self.assertIn('--require "$RELEASE_TAG"', wf)
         self.assertIn("contents: write", wf)
+        # A release made with the automatic token cannot start the `release` trigger, so the
+        # release workflow starts this one itself, after publishing and with the tag.
+        build = text(".github/workflows/ios-release.yml")
+        self.assertIn("actions: write", build)
+        self.assertGreater(build.index("gh workflow run update-source.yml"), build.index("gh release create"))
+        self.assertIn('-f tag="$RELEASE_TAG"', build)
+        self.assertIn("inputs.tag", wf)
         # The tag comes from an input the workflow does not control: it goes through env,
         # never straight into the shell text.
         for line in wf.splitlines():

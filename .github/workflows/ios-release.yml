@@ -9,6 +9,7 @@ on:
         default: ""
 permissions:
   contents: write
+  actions: write
 jobs:
   ipa:
     runs-on: macos-15
@@ -70,3 +71,6 @@ jobs:
             --title "IW4 Pocket $RELEASE_TAG" \
             --prerelease \
             --notes-file RELEASE_NOTES.md
+          # A release made with this token cannot start other workflows by itself, but a
+          # direct dispatch is allowed: SideStore's source.json follows the new release.
+          gh workflow run update-source.yml --ref main -f tag="$RELEASE_TAG"
