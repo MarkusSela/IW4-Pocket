@@ -19,6 +19,23 @@ fn normalize_name(name: &str) -> String {
     lower.strip_suffix("_mp").unwrap_or(&lower).to_owned()
 }
 
+/// Namespace (`iw4`, `t5`, ...) con almeno un'arma nel registro.
+fn installed_namespaces(registry: &WeaponRegistry) -> BTreeSet<String> {
+    registry
+        .iter()
+        .filter_map(|(_, d)| d.weapon.split_once(':').map(|(ns, _)| ns.to_owned()))
+        .collect()
+}
+
+/// `Some(ns)` se `raw` e qualificato con un namespace NON installato: quell'arma non puo
+/// esistere in questo catalogo, quindi si salta (con log). Un'arma ignota in un namespace
+/// PRESENTE resta invece un errore visibile.
+fn uninstalled_namespace(installed: &BTreeSet<String>, raw: &str) -> Option<String> {
+    let (ns, _) = raw.split_once(':')?;
+    let ns = ns.to_ascii_lowercase();
+    (!installed.contains(&ns)).then_some(ns)
+}
+
 /// Chiave di registro `<namespace>:<nome normalizzato>`; senza namespace solo il nome.
 /// Evita collisioni tra T5/IW4/IW5 con lo stesso nome base e il problema `_mp`.
 fn registry_key(ns: Option<asset_core::AssetNamespace>, name: &str) -> String {
@@ -153,13 +170,25 @@ pub fn default_extra_always(registry: &WeaponRegistry) -> Vec<String> {
     out.into_iter().collect()
 }
 
-/// Primo risultato (o il nome grezzo, che produrra MissingWeapon); gli altri in `extra`.
-fn resolve_slot(registry: &WeaponRegistry, raw: &str, extra: &mut Vec<String>) -> String {
+/// Primo risultato; gli altri in `extra`. Non trovato: nome vuoto (saltato, e registrato in
+/// `skipped`) se il namespace non e installato, altrimenti il nome grezzo, che produrra un
+/// `MissingWeapon` visibile.
+fn resolve_slot(
+    registry: &WeaponRegistry,
+    installed: &BTreeSet<String>,
+    raw: &str,
+    extra: &mut Vec<String>,
+    skipped: &mut BTreeSet<String>,
+) -> String {
     let mut all = resolve_names(registry, raw).into_iter();
     match all.next() {
         Some(first) => {
             extra.extend(all);
             first
+        }
+        None if uninstalled_namespace(installed, raw).is_some() => {
+            skipped.insert(raw.to_owned());
+            String::new()
         }
         None => raw.to_owned(),
     }
@@ -172,20 +201,41 @@ pub fn build_selection(
     classes: &[ClassRequest],
     extra_always: &[String],
 ) -> Result<Selection, ClosureError> {
+    let installed = installed_namespaces(registry);
+    let mut skipped: BTreeSet<String> = BTreeSet::new();
     let classes: Vec<ClassRequest> = classes
         .iter()
         .map(|c| {
             let mut attachments = Vec::new();
-            let primary = resolve_slot(registry, &c.primary, &mut attachments);
-            let secondary = resolve_slot(registry, &c.secondary, &mut attachments);
-            let lethal = resolve_slot(registry, &c.lethal, &mut attachments);
-            let tactical = resolve_slot(registry, &c.tactical, &mut attachments);
+            let primary =
+                resolve_slot(registry, &installed, &c.primary, &mut attachments, &mut skipped);
+            let secondary =
+                resolve_slot(registry, &installed, &c.secondary, &mut attachments, &mut skipped);
+            let lethal =
+                resolve_slot(registry, &installed, &c.lethal, &mut attachments, &mut skipped);
+            let tactical =
+                resolve_slot(registry, &installed, &c.tactical, &mut attachments, &mut skipped);
             for a in &c.attachments {
-                attachments.push(resolve_slot(registry, a, &mut Vec::new()));
+                attachments.push(resolve_slot(
+                    registry,
+                    &installed,
+                    a,
+                    &mut Vec::new(),
+                    &mut skipped,
+                ));
             }
             ClassRequest { primary, secondary, lethal, tactical, attachments, camo: c.camo.clone() }
         })
         .collect();
+    if !skipped.is_empty() {
+        // Una sola riga per piano (i preset ripetono le stesse armi molte volte).
+        diag::info!(
+            World,
+            "selective weapons: {} preset weapon(s) skipped, namespace not installed: {:?}",
+            skipped.len(),
+            skipped
+        );
+    }
     let mut extra: Vec<String> = Vec::new();
     for raw in extra_always {
         // Un default assente dal registro e ignorato (non e un errore come per le classi).
@@ -289,12 +339,17 @@ pub fn verify_host_classes(
     if host.is_empty() {
         return Err("host class list is empty".to_owned());
     }
+    let installed = installed_namespaces(registry);
     for c in host {
         for raw in [&c.primary, &c.secondary, &c.lethal, &c.tactical] {
             if raw.is_empty() {
                 continue;
             }
             let names = resolve_names(registry, raw);
+            // Un'arma di un namespace non installato non si puo equipaggiare comunque.
+            if names.is_empty() && uninstalled_namespace(&installed, raw).is_some() {
+                continue;
+            }
             if names.is_empty() || !names.iter().all(|n| selection.closure.weapons.contains(n)) {
                 return Err(format!("host class weapon {raw:?} not in closure"));
             }
@@ -456,6 +511,30 @@ mod selection_tests {
         assert!(sel.closure.weapons.contains("iw4:spectre"));
         // Namespace sbagliato = errore esplicito, mai l'arma di un altro namespace.
         assert!(build_selection(&reg, &[class("iw5:weapon/spectre_mp", "")], &[]).is_err());
+    }
+
+    #[test]
+    fn uninstalled_namespace_is_skipped_but_unknown_in_installed_is_error() {
+        // Catalogo reale: solo IW4. I preset citano anche t5/t6/iw5 (zone non installate).
+        let reg = registry(&["iw4:m4a1", "iw4:usp", "iw4:semtex"]);
+        let mixed = class("t5:weapon/spectre_mp", "iw4:weapon/usp_mp");
+        let mut other = class("iw4:weapon/m4a1_mp", "t6:weapon/fnp45_mp");
+        other.lethal = "iw4:weapon/semtex_mp".into();
+        other.tactical = "iw5:weapon/xm25_mp".into();
+        let sel = build_selection(&reg, &[mixed, other], &[]).expect("non installed is skipped");
+        assert!(sel.closure.weapons.contains("iw4:usp"));
+        assert!(sel.closure.weapons.contains("iw4:m4a1"));
+        assert!(sel.closure.weapons.contains("iw4:semtex"));
+        assert_eq!(sel.closure.weapons.len(), 3);
+        // Arma ignota in un namespace PRESENTE: errore visibile, mai saltata in silenzio.
+        assert!(build_selection(&reg, &[class("iw4:weapon/nope_mp", "")], &[]).is_err());
+        // Classe host con arma di namespace non installato: non blocca la selezione.
+        let host = vec![class("iw4:weapon/m4a1_mp", "t5:weapon/cz75_mp")];
+        let sel = build_selection(&reg, &host, &[]).unwrap();
+        assert!(verify_host_classes(&reg, &host, &sel).is_ok());
+        // ...ma un'arma host ignota in un namespace presente si.
+        let bad = vec![class("iw4:weapon/nope_mp", "")];
+        assert!(verify_host_classes(&reg, &bad, &sel).is_err());
     }
 
     #[test]
