@@ -1,0 +1,48 @@
+name: update-source
+# Keeps source.json (what SideStore reads) in step with the published releases, so nobody
+# has to regenerate it by hand. It runs when a release is published, or on request.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update-source
+  cancel-in-progress: false
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Test the generator
+        run: python3 tools/test_gen_source.py
+      - name: Regenerate source.json
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -e
+          if [ -n "$RELEASE_TAG" ]; then
+            python3 tools/gen_source.py --require "$RELEASE_TAG"
+          else
+            python3 tools/gen_source.py
+          fi
+      - name: Commit when it changed
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -e
+          if git diff --quiet -- source.json; then
+            echo "source.json is already current"
+            exit 0
+          fi
+          git config user.name "MarkusSela"
+          git config user.email "43043391+MarkusSela@users.noreply.github.com"
+          git add source.json
+          git commit -m "SideStore: regenerate source.json ${RELEASE_TAG:+for $RELEASE_TAG}"
+          git pull --rebase origin main
+          git push origin HEAD:main

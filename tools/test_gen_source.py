@@ -73,6 +73,34 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(source.strip_repeated_warning("Experimental prerelease."), "Experimental prerelease.")
         self.assertEqual(source.strip_repeated_warning("Menus changed."), "Menus changed.")
 
+    def test_the_token_goes_to_the_github_api_and_nowhere_else(self):
+        api = source.api_headers("https://api.github.com/repos/x/y/releases", token="secret")
+        self.assertEqual(api["Authorization"], "Bearer secret")
+        # IPA downloads redirect to other hosts: no credentials there.
+        self.assertEqual(source.api_headers("https://github.com/x/y/releases/download/v1/a.ipa", token="secret"), {})
+        self.assertEqual(source.api_headers("https://objects.example/a.ipa", token="secret"), {})
+        self.assertEqual(source.api_headers("https://api.github.com/x", token=""), {})
+
+    def test_all_pages_of_releases_are_read(self):
+        pages = {1: [{"n": i} for i in range(100)], 2: [{"n": i} for i in range(100, 130)]}
+        seen = []
+        def fetch(url):
+            seen.append(url)
+            return pages[int(url.rsplit("page=", 1)[1])]
+        self.assertEqual(len(source.get_all_releases(fetch)), 130)
+        self.assertEqual(len(seen), 2, "stops at the first short page")
+
+    def test_require_release_fails_when_the_new_release_is_missing(self):
+        rel = self.fixture("v0.3.9", "0.3.9", "23", True)
+        # A real GitHub asset URL carries /download/<tag>/, which is what require_release reads.
+        url = "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.3.9/IW4.Pocket.ipa"
+        self.blobs[url] = self.blobs.pop(rel["assets"][0]["browser_download_url"])
+        rel["assets"][0]["browser_download_url"] = url
+        result = source.build_source([rel], load_bytes=self.blobs.__getitem__)
+        source.require_release(result, "v0.3.9")
+        with self.assertRaises(ValueError):
+            source.require_release(result, "v0.4.0")
+
     def test_stable_and_test_releases_both_appear_even_when_stable_is_newer(self):
         releases = [self.fixture("v0.3.7c", "0.3.7", "21", True),
                     self.fixture("v0.3.8", "0.3.8", "22")]

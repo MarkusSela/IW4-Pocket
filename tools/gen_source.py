@@ -7,11 +7,16 @@ depends on a SideStore beta switch. Tags label release notes/URLs, never IPA
 versions. Info.plist inside the published IPA is authoritative; older verification
 reports contain Cargo versions. The newest stable release must always verify; an
 older release that cannot be verified is skipped with a warning.
-Run from the repository root: python3 tools/gen_source.py
+Run from the repository root: python3 tools/gen_source.py [--require TAG]
+`--require TAG` fails unless that release ended up in the source: the update workflow
+passes the tag it was started for, so a release that cannot be verified is a visible
+failure and not a silent gap. With GITHUB_TOKEN set, the GitHub API calls are
+authenticated (the anonymous limit is 60 requests an hour).
 """
 import hashlib
 import io
 import json
+import os
 import plistlib
 import re
 import sys
@@ -23,14 +28,40 @@ RAW = f"https://raw.githubusercontent.com/{REPO}/main"
 BUNDLE = "com.markussela.iw4l"
 
 
-def get_bytes(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "gen-source"})
+def get_bytes(url, headers=None):
+    req = urllib.request.Request(url, headers={"User-Agent": "gen-source", **(headers or {})})
     with urllib.request.urlopen(req, timeout=120) as response:
         return response.read()
 
 
+def api_headers(url, token=None):
+    """The token goes only to the GitHub API, never to the IPA download redirects."""
+    token = token if token is not None else os.environ.get("GITHUB_TOKEN", "")
+    if token and url.startswith("https://api.github.com/"):
+        return {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+    return {}
+
+
 def get(url):
-    return json.loads(get_bytes(url))
+    return json.loads(get_bytes(url, api_headers(url)))
+
+
+def get_all_releases(fetch=get, per_page=100, max_pages=10):
+    """Every page of the releases list, so releases past the first 100 are not dropped."""
+    releases = []
+    for page in range(1, max_pages + 1):
+        chunk = fetch(f"https://api.github.com/repos/{REPO}/releases?per_page={per_page}&page={page}")
+        releases.extend(chunk)
+        if len(chunk) < per_page:
+            break
+    return releases
+
+
+def require_release(source, tag):
+    """Fails unless `tag` is listed: a release that does not verify must not vanish quietly."""
+    marker = f"/download/{tag}/"
+    if not any(marker in v["downloadURL"] for v in source["apps"][0]["versions"]):
+        raise ValueError(f"Release {tag} is not in the source: its IPA did not verify or is missing")
 
 
 def order_key(version):
@@ -170,8 +201,11 @@ def build_source(releases, load_bytes=get_bytes):
 
 
 if __name__ == "__main__":
-    releases = get(f"https://api.github.com/repos/{REPO}/releases?per_page=100")
+    required = sys.argv[sys.argv.index("--require") + 1] if "--require" in sys.argv else ""
+    releases = get_all_releases()
     source = build_source(releases)
+    if required:
+        require_release(source, required)
     with open("source.json", "w", encoding="utf-8") as out:
         json.dump(source, out, indent=2, ensure_ascii=False)
         out.write("\n")

@@ -57,6 +57,19 @@ class Contract(unittest.TestCase):
         self.assertIn("python3 tools/test_gen_source.py", wf)
         self.assertLess(wf.index("python3 tools/test_gen_source.py"), wf.index("cargo build"))
 
+    def test_source_is_updated_by_a_workflow(self):
+        wf = text(".github/workflows/update-source.yml")
+        self.assertIn("types: [published]", wf)
+        self.assertIn("ref: main", wf)
+        self.assertLess(wf.index("tools/test_gen_source.py"), wf.index("tools/gen_source.py"))
+        self.assertIn('--require "$RELEASE_TAG"', wf)
+        self.assertIn("contents: write", wf)
+        # The tag comes from an input the workflow does not control: it goes through env,
+        # never straight into the shell text.
+        for line in wf.splitlines():
+            if line.strip().startswith(("python3", "git ", "echo")):
+                self.assertNotIn("${{", line, line)
+
     def test_no_secret_shaped_strings(self):
         pattern = re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}")
         for rel in ("tools", ".github", "crates/diag", "crates/launcher", "RELEASE_NOTES.md"):
