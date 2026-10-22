@@ -798,6 +798,7 @@ pub fn decode_server_packet(
 pub struct ConnectionTable {
     next_conn: u64,
     next_client: u32,
+    first_client: u32,
 
     assigned: std::collections::HashMap<ConnectionId, u32>,
 }
@@ -807,18 +808,38 @@ impl ConnectionTable {
         Self {
             next_conn: 0,
             next_client: first_client,
+            first_client,
             assigned: std::collections::HashMap::new(),
         }
     }
 
+    /// Gives a new connection the lowest free client id below the session cap
+    /// (`MAX_SESSION_MEMBERS`). Ids of retired connections are reused: client ids double as
+    /// entity numbers (corpses start at 18, the collision world holds 1024), so an id that
+    /// only ever grows eventually collides with them after enough joins and leaves.
+    /// Only when every id below the cap is taken does it fall back to counting up, with a
+    /// warning, so the caller still gets an id instead of a refusal.
     pub fn accept_new(&mut self, occupied: &[u32]) -> (ConnectionId, u32) {
-        while occupied.contains(&self.next_client) {
-            self.next_client = self.next_client.wrapping_add(1);
-        }
+        let cap = u32::from(master_protocol::MAX_SESSION_MEMBERS);
+        let in_use = |id: u32| occupied.contains(&id) || self.assigned.values().any(|a| *a == id);
+        let reused = (self.first_client..cap).find(|id| !in_use(*id));
+        let client = match reused {
+            Some(id) => id,
+            None => {
+                while in_use(self.next_client) {
+                    self.next_client = self.next_client.wrapping_add(1);
+                }
+                let id = self.next_client;
+                self.next_client = self.next_client.wrapping_add(1);
+                diag::warn!(
+                    Net,
+                    "client ids below {cap} are all taken; giving id {id} (may overlap corpse entities)"
+                );
+                id
+            }
+        };
         self.next_conn = self.next_conn.wrapping_add(1);
         let conn = ConnectionId(self.next_conn);
-        let client = self.next_client;
-        self.next_client = self.next_client.wrapping_add(1);
         self.assigned.insert(conn, client);
         (conn, client)
     }
@@ -857,5 +878,40 @@ impl core::fmt::Display for IdentityError {
         match self {
             Self::UnknownConnection => write!(f, "connection id is not registered"),
         }
+    }
+}
+
+#[cfg(test)]
+mod connection_table_tests {
+    use super::*;
+
+    #[test]
+    fn retired_ids_are_reused_instead_of_growing_past_the_cap() {
+        let mut table = ConnectionTable::starting_at(1);
+        // Many join/leave cycles with one other member present: never an id >= 18.
+        for _ in 0..200 {
+            let (conn, id) = table.accept_new(&[0]);
+            assert!(id >= 1 && id < 18, "id {id} escaped the participant cap");
+            assert_eq!(table.retire(conn), Some(id));
+        }
+    }
+
+    #[test]
+    fn ids_are_lowest_free_and_skip_occupied_and_assigned() {
+        let mut table = ConnectionTable::starting_at(1);
+        let (a, ia) = table.accept_new(&[0, 2]);
+        let (_b, ib) = table.accept_new(&[0, 2]);
+        assert_eq!((ia, ib), (1, 3));
+        table.retire(a);
+        let (_c, ic) = table.accept_new(&[0, 2]);
+        assert_eq!(ic, 1, "the freed id comes back first");
+    }
+
+    #[test]
+    fn a_full_table_still_hands_out_an_id() {
+        let mut table = ConnectionTable::starting_at(1);
+        let occupied: Vec<u32> = (0..18).collect();
+        let (_conn, id) = table.accept_new(&occupied);
+        assert!(id >= 18, "all ids below 18 are occupied");
     }
 }
