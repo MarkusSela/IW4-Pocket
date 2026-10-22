@@ -177,6 +177,12 @@ pub struct CommittedAdmission {
     pub first_commit: bool,
 }
 
+/// Client ids held by something that is not a connection and not yet on the scoreboard
+/// (bots that were minted but have not joined). The bots plugin keeps it up to date and the
+/// relay skips these ids when it enrols a human, so a human never takes a bot's slot.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct ReservedClientIds(pub Vec<u32>);
+
 #[derive(Resource)]
 pub struct UdpAuthorityHub {
     relay: RelayMailbox,

@@ -142,3 +142,19 @@ fn bot_names_are_unique_in_a_full_match() {
     assert_eq!(unique.len(), roster.bots.len());
     assert!(roster.bots.iter().all(|b| b.name != "bot"));
 }
+
+#[test]
+fn the_relay_is_told_every_id_the_bots_hold() {
+    // A bot that is minted but not on the scoreboard yet still holds its slot; the plugin
+    // publishes these ids so the relay never gives one of them to a human.
+    let mut roster = BotRoster::default();
+    let human = [ClientId(0)];
+    assert_eq!(add(&mut roster, 5, &human), 5);
+    let mut held: Vec<u32> = crate::plugin::reserved_ids_of(&roster);
+    held.sort_unstable();
+    let mut expected: Vec<u32> = roster.bots.iter().map(|b| b.id.0).collect();
+    expected.sort_unstable();
+    assert_eq!(held, expected);
+    assert_eq!(held.len(), 5);
+    assert!(!held.contains(&0), "the local player is not a bot");
+}

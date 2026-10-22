@@ -109,11 +109,13 @@ impl Plugin for BotsPlugin {
             .init_resource::<BotMeter>()
             .init_resource::<BotAutoFill>()
             .init_resource::<BotWanted>()
+            .init_resource::<net::ReservedClientIds>()
             .add_systems(
                 Update,
                 (
                     auto_fill_bots,
                     drain_bot_add_queue,
+                    publish_reserved_ids,
                     evict_bots_claiming_local_client,
                     boot_bots,
                     apply_bot_tp,
@@ -204,6 +206,19 @@ fn auto_fill_bots(
     }
     queue.push(missing);
     diag::info!(Sim, "bots: {AUTO_FILL_ENV}={wanted} → queued {missing}");
+}
+
+/// Tells the relay which client ids the bots hold, so a human enrolled in the same frame a
+/// bot was minted never receives that bot's id.
+fn publish_reserved_ids(roster: Res<BotRoster>, mut reserved: ResMut<net::ReservedClientIds>) {
+    let ids = reserved_ids_of(&roster);
+    if reserved.0 != ids {
+        reserved.0 = ids;
+    }
+}
+
+pub(crate) fn reserved_ids_of(roster: &BotRoster) -> Vec<u32> {
+    roster.bots.iter().map(|bot| bot.id.0).collect()
 }
 
 fn drain_bot_add_queue(

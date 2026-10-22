@@ -1250,6 +1250,7 @@ fn apply_master_lifecycle(
     mut hub: Option<ResMut<UdpAuthorityHub>>,
     mut authority: Option<ResMut<AuthorityWorld>>,
     mut pending_notify: Option<ResMut<crate::PendingGameNotify>>,
+    reserved: Option<Res<crate::ReservedClientIds>>,
 ) {
     let Some(bridge) = bridge else {
         return;
@@ -1258,7 +1259,7 @@ fn apply_master_lifecycle(
     if let Some(hub) = hub.as_mut()
         && matches!(state, MasterBridgeState::Hosting { .. })
     {
-        let occupied: Vec<_> = authority
+        let mut occupied: Vec<_> = authority
             .as_ref()
             .map(|authority| {
                 authority
@@ -1269,6 +1270,10 @@ fn apply_master_lifecycle(
                     .collect()
             })
             .unwrap_or_else(Vec::new);
+        // Bots minted but not on the scoreboard yet also hold their slot.
+        if let Some(reserved) = reserved.as_ref() {
+            occupied.extend(reserved.0.iter().copied());
+        }
         hub.reconcile_relay_membership(state.members(), state.identity().member_id, &occupied);
     }
     for fact in bridge.drain_facts() {

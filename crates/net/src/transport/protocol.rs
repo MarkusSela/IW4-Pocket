@@ -908,6 +908,15 @@ mod connection_table_tests {
     }
 
     #[test]
+    fn ids_reserved_by_bots_are_never_handed_to_a_human() {
+        let mut table = ConnectionTable::starting_at(1);
+        // Bots hold 1..=8 but are not on the scoreboard: they arrive as `occupied`.
+        let reserved: Vec<u32> = (1..=8).collect();
+        let (_conn, id) = table.accept_new(&reserved);
+        assert_eq!(id, 9, "the first id after the bots");
+    }
+
+    #[test]
     fn a_full_table_still_hands_out_an_id() {
         let mut table = ConnectionTable::starting_at(1);
         let occupied: Vec<u32> = (0..18).collect();
