@@ -1484,9 +1484,9 @@ impl SimState {
         let Some(area_world) = self.area_entity_world.as_mut() else {
             return false;
         };
-        let entity_num = u16::try_from(id.0).unwrap_or_else(|_| {
-            panic!("player entity index does not fit the 1024-entry collision world");
-        });
+        let Some(entity_num) = Self::area_entity_num(id) else {
+            return false;
+        };
         let absmin = [
             origin[0] + mins[0] - 1.0,
             origin[1] + mins[1] - 1.0,
@@ -1497,10 +1497,13 @@ impl SimState {
             origin[1] + maxs[1] + 1.0,
             origin[2] + maxs[2] + 1.0,
         ];
-        let bounds = clipmap_iw4::AreaBounds::from_mins_maxs(absmin, absmax).unwrap_or_else(|_| {
-            panic!("player link Bounds are invalid");
-        });
-        area_world
+        // A bad origin (NaN/inf from physics or script) must not take the whole host down
+        // with every bot: refuse this one link and say so.
+        let Ok(bounds) = clipmap_iw4::AreaBounds::from_mins_maxs(absmin, absmax) else {
+            diag::warn!(Sim, "collision: player {} link refused, bounds not finite (origin {origin:?})", id.0);
+            return false;
+        };
+        if area_world
             .link(
                 entity_num,
                 CONTENTS_BODY,
@@ -1509,34 +1512,50 @@ impl SimState {
                 [absmin[0], absmin[1]],
                 [absmax[0], absmax[1]],
             )
-            .unwrap_or_else(|_| {
-                panic!("collision link rejected player link state");
-            });
+            .is_err()
+        {
+            diag::warn!(Sim, "collision: player {} link rejected by the area world", id.0);
+            return false;
+        }
         true
+    }
+
+    /// Entity number of a player in the 1024-entry collision world, or None (logged) when the
+    /// client id does not fit. Ids come from the network layer, so this must not panic.
+    fn area_entity_num(id: ClientId) -> Option<u16> {
+        match u16::try_from(id.0) {
+            Ok(n) if usize::from(n) < 1024 => Some(n),
+            _ => {
+                diag::warn!(Sim, "collision: client id {} does not fit the 1024-entry collision world", id.0);
+                None
+            }
+        }
     }
 
     pub(crate) fn translate_player_area(&mut self, id: ClientId, delta: [f32; 3]) -> bool {
         let Some(area_world) = self.area_entity_world.as_mut() else {
             return false;
         };
-        let Ok(entity_num) = u16::try_from(id.0) else {
-            panic!("player entity index does not fit the 1024-entry collision world");
+        let Some(entity_num) = Self::area_entity_num(id) else {
+            return false;
         };
-        area_world.translate(entity_num, delta).unwrap_or_else(|_| {
-            panic!("collision link rejected translated player Bounds");
-        })
+        match area_world.translate(entity_num, delta) {
+            Ok(moved) => moved,
+            Err(_) => {
+                diag::warn!(Sim, "collision: player {} translate rejected (delta {delta:?})", id.0);
+                false
+            }
+        }
     }
 
     pub(crate) fn unlink_player_area(&mut self, id: ClientId) -> bool {
         let Some(area_world) = self.area_entity_world.as_mut() else {
             return false;
         };
-        let Ok(entity_num) = u16::try_from(id.0) else {
-            panic!("player entity index does not fit the 1024-entry collision world");
+        let Some(entity_num) = Self::area_entity_num(id) else {
+            return false;
         };
-        area_world.unlink(entity_num).unwrap_or_else(|_| {
-            panic!("collision unlink rejected player entity index");
-        })
+        area_world.unlink(entity_num).unwrap_or(false)
     }
 
     pub(crate) fn forget_client_membership(&mut self, id: ClientId) {
@@ -4149,4 +4168,24 @@ pub struct WeaponScriptSounds {
     pub pickup: Option<String>,
     pub pickup_player: Option<String>,
     pub proj_explosion: Option<String>,
+}
+
+#[cfg(test)]
+mod area_entity_num_tests {
+    use super::*;
+
+    #[test]
+    fn client_ids_inside_the_collision_world_map_to_their_own_number() {
+        for id in [0u32, 1, 17, 18, 1023] {
+            assert_eq!(SimState::area_entity_num(ClientId(id)), Some(id as u16));
+        }
+    }
+
+    #[test]
+    fn client_ids_outside_the_collision_world_are_refused_not_a_panic() {
+        // 1024 entries (0..=1023); anything else used to take the host down.
+        for id in [1024u32, 2000, 65_535, 65_536, u32::MAX] {
+            assert_eq!(SimState::area_entity_num(ClientId(id)), None);
+        }
+    }
 }
