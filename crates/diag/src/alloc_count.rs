@@ -170,15 +170,31 @@ unsafe extern "C" {
     fn getenv(name: *const core::ffi::c_char) -> *mut core::ffi::c_char;
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn malloc_trim(pad: usize) -> core::ffi::c_int;
+    /// libmalloc (Apple, already linked through libSystem): returns cached free pages to
+    /// the OS. `zone` NULL = every zone, `goal` 0 = as much as possible. Returns bytes freed.
+    #[cfg(target_os = "ios")]
+    fn malloc_zone_pressure_relief(zone: *mut core::ffi::c_void, goal: usize) -> usize;
 }
 
-pub fn release_freed_heap() -> std::time::Duration {
+/// Hands free heap pages back to the OS and reports how long it took and how many bytes
+/// were released (0 where the platform gives no figure). Safe from any thread; it only
+/// drops allocator caches, it never invalidates a live pointer.
+pub fn release_freed_heap_report() -> (std::time::Duration, u64) {
     let at = std::time::Instant::now();
+    let mut released = 0u64;
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     {
         unsafe { malloc_trim(0) };
     }
-    at.elapsed()
+    #[cfg(target_os = "ios")]
+    {
+        released = unsafe { malloc_zone_pressure_relief(core::ptr::null_mut(), 0) } as u64;
+    }
+    (at.elapsed(), released)
+}
+
+pub fn release_freed_heap() -> std::time::Duration {
+    release_freed_heap_report().0
 }
 
 #[cfg(windows)]

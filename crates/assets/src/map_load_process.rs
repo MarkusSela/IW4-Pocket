@@ -59,6 +59,16 @@ impl MapLoadProcess {
             return;
         }
         self.admission = Some(self.progress.begin(StageId::Admission, None));
+        // Local preparation is done: the decode buffers are dead but the allocator still
+        // holds them. Give them back before the session installs the world (the peak).
+        let (took, released) = diag::release_freed_heap_report();
+        diag::info!(
+            World,
+            "heap relief before admission: released {} MiB in {:.1}ms for `{}`",
+            released >> 20,
+            took.as_secs_f32() * 1000.0,
+            self.zone
+        );
     }
 
     /// The client is in and the world is installed. The heap maintenance that
@@ -74,7 +84,8 @@ impl MapLoadProcess {
             self.progress.record_skipped(StageId::Admission);
         }
         let installed_ms = self.requested_at.elapsed().as_secs_f32() * 1000.0;
-        let trim_ms = diag::release_freed_heap().as_secs_f32() * 1000.0;
+        let (trim, released) = diag::release_freed_heap_report();
+        let trim_ms = trim.as_secs_f32() * 1000.0;
         let with_trim_ms = self.requested_at.elapsed().as_secs_f32() * 1000.0;
         let rss = asset_transport::process_resident_bytes()
             .map(|bytes| format!(" rss_mib={}", bytes >> 20))
@@ -84,8 +95,9 @@ impl MapLoadProcess {
             .unwrap_or_default();
         diag::info!(
             World,
-            "load complete: {installed_ms:.0}ms overlay-to-world-installed (+trim {with_trim_ms:.0}ms) for `{}`{rss}{heap} trim={trim_ms:.1}ms",
-            self.zone
+            "load complete: {installed_ms:.0}ms overlay-to-world-installed (+trim {with_trim_ms:.0}ms) for `{}`{rss}{heap} trim={trim_ms:.1}ms released_mib={}",
+            self.zone,
+            released >> 20
         );
     }
 

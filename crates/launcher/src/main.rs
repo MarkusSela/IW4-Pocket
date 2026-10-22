@@ -58,6 +58,7 @@ fn spawn_memory_logger() {
         let mut last_mb = 0u64;
         let mut last_log = std::time::Instant::now();
         let mut last_classes = std::time::Instant::now();
+        let mut last_relief = std::time::Instant::now() - std::time::Duration::from_secs(60);
         loop {
             if let Some(huge) = diag::take_last_huge() {
                 diag::boot_crumb(&format!("big allocation: {} MB requested", huge / (1024 * 1024)));
@@ -81,6 +82,16 @@ fn spawn_memory_logger() {
             // Close to the limit the steps shrink, so the lines before a silent kill
             // show how fast memory was climbing (a 40 MiB step hid the last seconds).
             let headroom = diag::ios_env::available_bytes().unwrap_or(u64::MAX) / (1024 * 1024);
+            // Close to the kill line, hand back allocator caches (at most every 2 s).
+            if headroom < 400 && last_relief.elapsed() >= std::time::Duration::from_secs(2) {
+                let (took, released) = diag::release_freed_heap_report();
+                diag::boot_crumb(&format!(
+                    "heap relief under pressure: released {} MiB in {:.1}ms (iOS still allows {headroom} MiB)",
+                    released / (1024 * 1024),
+                    took.as_secs_f32() * 1000.0
+                ));
+                last_relief = std::time::Instant::now();
+            }
             let step = if headroom < 300 { 8 } else { 40 };
             let changed = footprint.abs_diff(last_mb) >= step;
             if changed || last_log.elapsed() >= std::time::Duration::from_secs(2) {

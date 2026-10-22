@@ -14,7 +14,7 @@ pub mod wgsl_dump;
 pub use alloc_count::{
     ProcessAllocationStats, ProcessCountingAllocator, counting_enabled, size_class_report, take_last_huge,
     process_allocation_saturated, process_allocation_slots_used, process_allocations,
-    process_live_heap_bytes, release_freed_heap,
+    process_live_heap_bytes, release_freed_heap, release_freed_heap_report,
 };
 
 use std::{
