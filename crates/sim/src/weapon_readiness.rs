@@ -23,13 +23,25 @@ impl WeaponReadiness {
 
 static LOGGED: Mutex<BTreeSet<u32>> = Mutex::new(BTreeSet::new());
 
-/// Logga "preparazione" una sola volta per arma. Ritorna true se ha loggato.
+/// Logs once per weapon and match that a weapon was refused because it is not loaded.
+/// Selective loading fixes the loaded set at match start: the weapon stays unavailable for
+/// the whole match, so the line says that instead of promising it will arrive.
 pub(crate) fn log_preparing_once(id: u32, context: &str) -> bool {
     let first = LOGGED.lock().map(|mut s| s.insert(id)).unwrap_or(false);
     if first {
-        diag::info!(Sim, "weapon {} in preparazione ({}): differito", id, context);
+        diag::info!(
+            Sim,
+            "weapon {id} is not loaded (selective weapon loading), refused in {context} until the next match"
+        );
     }
     first
+}
+
+/// New match, new table: forget which refusals were already logged.
+pub(crate) fn reset_logged() {
+    if let Ok(mut logged) = LOGGED.lock() {
+        logged.clear();
+    }
 }
 
 #[cfg(test)]
@@ -48,6 +60,16 @@ mod tests {
         assert!(!r.is_pending(0));
         assert!(r.is_pending(1));
         assert!(!r.is_pending(9));
+    }
+
+    #[test]
+    fn a_new_match_logs_the_refusal_again() {
+        // Ids are far from anything the other tests use: LOGGED is process-wide.
+        assert!(log_preparing_once(900_001, "test"));
+        assert!(!log_preparing_once(900_001, "test"), "once per match");
+        reset_logged();
+        assert!(log_preparing_once(900_001, "test"), "reset between matches");
+        reset_logged();
     }
 
     #[test]

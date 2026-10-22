@@ -1787,16 +1787,16 @@ fn apply_give_offhand(
 fn choose_bot_class(world: &mut FrameWorld, id: ClientId, index: u8) {
     let t5 = crate::script::is_t5(world.ecs());
     let bot_classes = &world.bootstrap_ref().bot_classes;
-    if !bot_classes.is_empty()
+    // A preset whose weapon is not loaded cannot be equipped. Returning here would leave the
+    // bot without any class at its first spawn, so it takes the default class instead.
+    let unloaded = !bot_classes.is_empty()
         && !t5
-        && let Some(pending) =
-            class_pending_weapon(world, &bot_classes[index as usize % bot_classes.len()])
-    {
-        // Arma in preparazione: mantieni lo stato precedente, niente rifiuto ne fallback.
-        crate::weapon_readiness::log_preparing_once(pending, "choose_class");
-        return;
-    }
-    let def = (!bot_classes.is_empty() && !t5)
+        && class_pending_weapon(world, &bot_classes[index as usize % bot_classes.len()])
+            .inspect(|pending| {
+                crate::weapon_readiness::log_preparing_once(*pending, "bot choose_class");
+            })
+            .is_some();
+    let def = (!bot_classes.is_empty() && !t5 && !unloaded)
         .then(|| bot_classes[index as usize % bot_classes.len()].clone())
         .filter(|def| !def.locked && validate_class_content(world, def).is_ok());
     match def {
@@ -1869,8 +1869,18 @@ fn apply_select_class(
     };
 
     if let Some(pending) = class_pending_weapon(world, &def) {
-        // Differito: stato precedente invariato, nessun ClassRejected/LockedContent.
+        // Not loaded for this match: say so to the client, so the class screen does not wait.
         crate::weapon_readiness::log_preparing_once(pending, "select_class");
+        world.push_event(
+            tick,
+            EventAudience::Client(id),
+            SimEvent::ClassRejected {
+                request_id,
+                class_id,
+                revision,
+                reason: crate::ClassRejectReason::LockedContent,
+            },
+        );
         return ActionOutcome::Refused;
     }
 

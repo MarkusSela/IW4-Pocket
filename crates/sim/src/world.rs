@@ -375,6 +375,7 @@ impl SimContentBuilder {
     /// Tabella di prontezza del caricamento selettivo (active=false => invariato).
     pub fn set_weapon_readiness(&mut self, readiness: crate::WeaponReadiness) {
         self.weapon_readiness = readiness;
+        crate::weapon_readiness::reset_logged();
     }
 
     pub fn set_weapon_transition_groups(&mut self, groups: Vec<u32>) {
