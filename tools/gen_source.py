@@ -64,6 +64,22 @@ def release_key(version):
     return (version_key(version["version"]), version_key(version["buildVersion"]), version["date"])
 
 
+_REPEATED_WARNING = ("Experimental prerelease.", "Not verified on a phone.")
+
+
+def strip_repeated_warning(summary):
+    """Drops the opening sentences the TEST prefix already says (in any order, once each)."""
+    text = summary.strip()
+    changed = True
+    while changed:
+        changed = False
+        for sentence in _REPEATED_WARNING:
+            if text.startswith(sentence):
+                text = text[len(sentence):].lstrip()
+                changed = True
+    return text or summary
+
+
 def release_version(rel, ipa, load_bytes):
     data = load_bytes(ipa["browser_download_url"])
     info = ipa_metadata(data)
@@ -85,6 +101,9 @@ def release_version(rel, ipa, load_bytes):
     summary = summary.replace("**", "").replace("`", "")
     label = rel["tag_name"].removeprefix("v")
     prefix = f"TEST {label} — Experimental prerelease. Not verified on a phone. No confirmed fix for the memory crash. " if rel["prerelease"] else ""
+    if prefix:
+        # The release notes open with the same warning; saying it twice buries the real summary.
+        summary = strip_repeated_warning(summary)
     return {
         "version": info["CFBundleShortVersionString"],
         "buildVersion": info["CFBundleVersion"],

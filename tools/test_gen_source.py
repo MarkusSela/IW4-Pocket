@@ -62,6 +62,17 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(newest["minOSVersion"], "15.0")
         self.assertEqual(newest["sha256"], releases[2]["assets"][0]["digest"][7:])
 
+    def test_test_description_does_not_repeat_the_warning_twice(self):
+        rel = self.fixture("v0.3.9", "0.3.9", "23", True)
+        rel["body"] = ("# IW4 Pocket 0.3.9\n\n**Experimental prerelease. Not verified on a phone.** "
+                       "Stability fixes; the memory crash is still unproven.")
+        text = self.generate([rel])["versions"][0]["localizedDescription"]
+        self.assertEqual(text.count("Experimental prerelease."), 1, text)
+        self.assertEqual(text.count("Not verified on a phone."), 1, text)
+        self.assertTrue(text.endswith("Stability fixes; the memory crash is still unproven."), text)
+        self.assertEqual(source.strip_repeated_warning("Experimental prerelease."), "Experimental prerelease.")
+        self.assertEqual(source.strip_repeated_warning("Menus changed."), "Menus changed.")
+
     def test_stable_and_test_releases_both_appear_even_when_stable_is_newer(self):
         releases = [self.fixture("v0.3.7c", "0.3.7", "21", True),
                     self.fixture("v0.3.8", "0.3.8", "22")]
