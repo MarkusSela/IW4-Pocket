@@ -312,6 +312,22 @@ static REGISTRY: Mutex<Option<Arc<WeaponRegistry>>> = Mutex::new(None);
 static EXTRA_CLASSES: Mutex<Vec<ClassRequest>> = Mutex::new(Vec::new());
 /// Selezione del walk in corso / dell'ultimo common set selettivo.
 static ACTIVE: Mutex<Option<Arc<Selection>>> = Mutex::new(None);
+/// Ultimo piano costruito e gli ingressi da cui deriva. Una partita chiede il piano piu volte
+/// (chiave della cache, mappa residente): con gli stessi ingressi la risposta deve essere la
+/// stessa, senza ricostruire, senza loggare di nuovo e senza sovrascrivere `ACTIVE`.
+static LAST_PLAN: Mutex<Option<(u64, Option<Arc<Selection>>)>> = Mutex::new(None);
+
+/// Firma degli ingressi del piano: registro (nomi), classi dichiarate dall'host, classi dei bot.
+fn plan_signature(registry: &WeaponRegistry, classes: &[ClassRequest]) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for (_, deps) in registry.iter() {
+        deps.weapon.hash(&mut hasher);
+    }
+    for class in classes {
+        format!("{class:?}").hash(&mut hasher);
+    }
+    hasher.finish()
+}
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
@@ -420,6 +436,14 @@ pub fn plan_selection() -> Option<Arc<Selection>> {
     let mut classes: Vec<ClassRequest> =
         frame::showcase_classes().iter().map(class_request_from_preset).collect();
     classes.extend(host.iter().cloned());
+    let signature = plan_signature(&registry, &classes);
+    if let Some((last, cached)) = lock(&LAST_PLAN).clone()
+        && last == signature
+    {
+        // Stessi ingressi: stesso piano (e stesso digest), nessun log duplicato.
+        *lock(&ACTIVE) = cached.clone();
+        return cached;
+    }
     let extra_always = default_extra_always(&registry);
     let built = build_selection(&registry, &classes, &extra_always).and_then(|sel| {
         verify_host_classes(&registry, &host, &sel)
@@ -437,11 +461,13 @@ pub fn plan_selection() -> Option<Arc<Selection>> {
             );
             let selection = Arc::new(selection);
             *lock(&ACTIVE) = Some(Arc::clone(&selection));
+            *lock(&LAST_PLAN) = Some((signature, Some(Arc::clone(&selection))));
             Some(selection)
         }
         Err(error) => {
             diag::warn!(World, "selective weapons FAILED -> full preload: {error}");
             *lock(&ACTIVE) = None;
+            *lock(&LAST_PLAN) = Some((signature, None));
             None
         }
     }
@@ -533,6 +559,17 @@ mod selection_tests {
         assert!(sel.closure.weapons.contains("iw4:spectre"));
         // Namespace sbagliato = errore esplicito, mai l'arma di un altro namespace.
         assert!(build_selection(&reg, &[class("iw5:weapon/spectre_mp", "")], &[]).is_err());
+    }
+
+    #[test]
+    fn plan_signature_depends_on_registry_and_classes_not_on_call_count() {
+        let reg = registry(&["iw4:m4a1", "iw4:usp"]);
+        let a = vec![class("iw4:weapon/m4a1_mp", "iw4:weapon/usp_mp")];
+        let b = vec![class("iw4:weapon/usp_mp", "")];
+        assert_eq!(plan_signature(&reg, &a), plan_signature(&reg, &a), "same inputs, same signature");
+        assert_ne!(plan_signature(&reg, &a), plan_signature(&reg, &b), "a class change must replan");
+        let other = registry(&["iw4:m4a1", "iw4:usp", "iw4:ak47"]);
+        assert_ne!(plan_signature(&reg, &a), plan_signature(&other, &a), "a new catalog must replan");
     }
 
     #[test]
