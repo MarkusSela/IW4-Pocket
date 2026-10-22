@@ -148,7 +148,11 @@ fn resolve_names(registry: &WeaponRegistry, raw: &str) -> Vec<String> {
 /// il registro conosce davvero. Un nome assente NON fa fallire la selezione (vedi
 /// `resolve_names`: vuoto => ignorato). Le killstreak sono tutte quelle `killstreak_*`.
 pub fn default_extra_always(registry: &WeaponRegistry) -> Vec<String> {
-    const FIXED: [&str; 7] = [
+    // Weapons the simulation hands out by name, outside any class: melee, objective items,
+    // killstreak and insertion carriers, and the stand-ins the script host uses for launchers
+    // and shields (sim/script/host/players.rs, sim/equipment.rs). A weapon that is not loaded is
+    // refused by `give` and ignored by pickups, so these must always be resident.
+    const FIXED: [&str; 16] = [
         "knife_mp",
         "defaultweapon_mp",
         "briefcase_bomb_mp",
@@ -156,10 +160,28 @@ pub fn default_extra_always(registry: &WeaponRegistry) -> Vec<String> {
         "throwingknife_mp",
         "frag_grenade_mp",
         "fists_mp",
+        "airdrop_marker_mp",
+        "flare_mp",
+        "smoke_grenade_mp",
+        "flash_grenade_mp",
+        "riotshield_mp",
+        "stinger_mp",
+        "javelin_mp",
+        "usp_mp",
+        "m4_mp",
     ];
     let mut out: BTreeSet<String> = BTreeSet::new();
+    let mut absent: Vec<&str> = Vec::new();
     for raw in FIXED {
-        out.extend(resolve_names(registry, raw));
+        let found = resolve_names(registry, raw);
+        if found.is_empty() {
+            absent.push(raw);
+        }
+        out.extend(found);
+    }
+    if !absent.is_empty() {
+        // Not an error (the catalog may not carry every stand-in), but never silent.
+        diag::info!(World, "selective weapons: always-resident weapons not in the catalog: {absent:?}");
     }
     for (_, d) in registry.iter() {
         let base = d.weapon.rsplit(':').next().unwrap_or(&d.weapon);
@@ -511,6 +533,22 @@ mod selection_tests {
         assert!(sel.closure.weapons.contains("iw4:spectre"));
         // Namespace sbagliato = errore esplicito, mai l'arma di un altro namespace.
         assert!(build_selection(&reg, &[class("iw5:weapon/spectre_mp", "")], &[]).is_err());
+    }
+
+    #[test]
+    fn system_weapons_are_always_resident_when_the_catalog_has_them() {
+        let reg = registry(&[
+            "iw4:knife", "iw4:airdrop_marker", "iw4:flare", "iw4:riotshield", "iw4:stinger",
+            "iw4:javelin", "iw4:killstreak_predator", "iw4:m4a1",
+        ]);
+        let always = default_extra_always(&reg);
+        for must in ["iw4:knife", "iw4:airdrop_marker", "iw4:flare", "iw4:riotshield", "iw4:stinger", "iw4:javelin", "iw4:killstreak_predator"] {
+            assert!(always.iter().any(|w| w == must), "{must} must always be resident: {always:?}");
+        }
+        assert!(!always.iter().any(|w| w == "iw4:m4a1"), "class weapons are not forced: {always:?}");
+        // Names missing from the catalog are skipped, not an error.
+        let sel = build_selection(&reg, &[class("iw4:weapon/m4a1_mp", "")], &always).unwrap();
+        assert!(sel.closure.weapons.contains("iw4:airdrop_marker"));
     }
 
     #[test]
