@@ -131,6 +131,20 @@ class Contract(unittest.TestCase):
             self.assertIn(name, src)
         self.assertIn("SpotShadowRt", src)
 
+    def test_memory_settings_compiles_standalone_in_ci(self):
+        # CI runs `rustc --edition=2024 --test crates/diag/src/memory_settings.rs` on this
+        # file alone: no other module of the crate exists there (0.3.8 build failed on this).
+        src = text("crates/diag/src/memory_settings.rs")
+        non_test = src.split("#[cfg(test)]", 1)[0]
+        code = "\n".join(line.split("//", 1)[0] for line in non_test.splitlines())
+        for bad in ("crate::", "super::", "diag::", "self::"):
+            self.assertNotIn(bad, code, f"{bad} is not available in the standalone CI build")
+        for name in re.findall(r"^\s*(?:pub\s+)?(?:use|mod)\s+([A-Za-z_][\w:]*)", code, re.M):
+            self.assertTrue(name.startswith("std"), f"external use/mod in standalone file: {name}")
+        detail = text("crates/diag/src/detail.rs")
+        env = re.search(r'pub const DIAG_ENV: &str = "([^"]+)";', detail).group(1)
+        self.assertIn(f'"{env}" => matches!(value, "normal" | "detailed")', code)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
