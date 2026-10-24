@@ -1,6 +1,6 @@
 # IW4 Pocket 0.3.9 — build 23
 
-**Stable release, with a known limit: memory.** Tried on an iPhone 13 Pro Max (about 3 GB granted): 17 bots, one match of about 9 minutes, then iOS closed the app. Tried on an M1 iPad (5.1 GB granted): 4-5 matches in a row, then the memory ran out while loading a bigger map. The app does not give memory back between matches; 0.4.0 works on that first.
+**Stable release, with a known limit: memory.** Tried on an iPhone 13 Pro Max (about 3 GB granted): 17 bots, one match of about 9 minutes, then iOS closed the app. Tried on an M1 iPad (5.1 GB granted): 4-5 matches in a row on a small map held, but big maps (Afghan, Terminal) left only 40-290 MiB free, and one Afghan load ended with the app closed. About 1 GB stays in use after the first match and does not grow with later ones; 0.4.0 works on both numbers first.
 
 0.3.9 is a stability release. It fixes problems found by reading the 0.3.8 code and its first real logs. Selective weapon loading now starts (it never did in 0.3.8), but it saves little: the weapon models skipped were about 10% of the total.
 

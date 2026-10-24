@@ -55,9 +55,9 @@ Die Oberfläche zeigt Version und Build der App, zum Beispiel `0.3.9 (23)`. **Ni
 
 ## 📱 Läuft es auf meinem Gerät?
 
-- ✅ **Getestet (0.3.9):** iPhone 13 Pro Max (~3 GB gewährt), iOS 27: 17 Bots, ein Match von etwa 9 Minuten, dann hat iOS die App mit nur wenigen MiB Rest beendet. iPad Pro/Air M1 (5,1 GB gewährt): 17 Bots, 4-5 Matches hintereinander auf derselben Karte, 35-48 FPS. iPhone 17 Pro Max (6 GB gewährt): komplette Matches mit Bots, laut treuenten
+- ✅ **Getestet (0.3.9):** iPhone 13 Pro Max (~3 GB gewährt), iOS 27: 17 Bots, ein Match von etwa 9 Minuten, dann hat iOS die App mit nur wenigen MiB Rest beendet. iPad Pro/Air M1 (5,1 GB gewährt): 17 Bots, 4-5 Matches hintereinander (das letzte auf Afghan endete mit geschlossener App), 35-48 FPS. iPhone 17 Pro Max (6 GB gewährt): komplette Matches mit Bots, laut treuenten
 - ❓ **Alles andere ist nicht verifiziert.** Technisch sollte es auf jedem iPhone oder iPad mit Metal laufen; die App deklariert iOS 15 als Minimum, ich habe es dort aber nie ausprobiert
-- 🧠 **Der Speicher ist die Grenze.** Die App gibt zwischen den Matches keinen Speicher zurück. Auf einem Telefon mit etwa 3 GB kann schon ein langes Match sie beenden; auf dem M1-iPad (5,1 GB) ging er beim 4.-5. Match aus, beim Laden einer größeren Karte (Afghan). Beende die App zwischen den Sitzungen. Bei etwa 3 GB probiere Render scale 0.3 bis 0.5 und wenige Bots. Das zu beheben ist das erste Ziel von 0.4.0.
+- 🧠 **Der Speicher ist die Grenze, und er hängt von der Karte ab.** Nach dem ersten Match bleibt etwa 1 GB belegt (es wächst mit weiteren Matches nicht). Große Karten (Afghan, Terminal) brauchen beim Laden etwa 1,7 GB mehr: auf dem M1-iPad (5,1 GB) blieben nur 40-290 MiB frei, selbst nach frischem Start. Auf einem Telefon mit etwa 3 GB kann schon ein langes Match auf einer kleinen Karte die App beenden. Bei etwa 3 GB probiere Render scale 0.3 bis 0.5 und wenige Bots. Das zu beheben ist das erste Ziel von 0.4.0.
 - 🎮 **Zum Spielen braucht man einen Controller.** Touch funktioniert nur in den Menüs
 
 ## 🐞 Hilf mir beim Testen

@@ -55,9 +55,9 @@ The UI shows the app version and build, for example `0.3.9 (23)`. **Do not unins
 
 ## 📱 Will it work on my device?
 
-- ✅ **Tested (0.3.9):** iPhone 13 Pro Max (~3 GB granted), iOS 27: 17 bots, one match of about 9 minutes, then iOS closed the app with only a few MiB left. iPad Pro/Air M1 (5.1 GB granted): 17 bots, 4-5 matches in a row on the same map, 35-48 FPS. iPhone 17 Pro Max (6 GB granted): full matches with bots, reported by treuenten
+- ✅ **Tested (0.3.9):** iPhone 13 Pro Max (~3 GB granted), iOS 27: 17 bots, one match of about 9 minutes, then iOS closed the app with only a few MiB left. iPad Pro/Air M1 (5.1 GB granted): 17 bots, 4-5 matches in a row (the last one on Afghan ended with the app closed), 35-48 FPS. iPhone 17 Pro Max (6 GB granted): full matches with bots, reported by treuenten
 - ❓ **Everything else is unverified.** Technically it should run on any iPhone or iPad with Metal; the app declares iOS 15 as its minimum, but I never tried it there
-- 🧠 **Memory is the limit.** The app does not give memory back between matches. On a phone with about 3 GB, one long match can already close it; on the M1 iPad (5.1 GB) it ran out on the 4th-5th match, while loading a bigger map (Afghan). Close the app between sessions. With about 3 GB, try Render scale 0.3 to 0.5 and a low bot count. Fixing this is the first goal of 0.4.0.
+- 🧠 **Memory is the limit, and it depends on the map.** After the first match about 1 GB of memory stays in use (it does not grow with further matches). Big maps (Afghan, Terminal) take about 1.7 GB more while loading: on the M1 iPad (5.1 GB) they left only 40-290 MiB free, even from a fresh start. On a phone with about 3 GB one long match on a small map can already close the app. With about 3 GB, try Render scale 0.3 to 0.5 and a low bot count. Fixing this is the first goal of 0.4.0.
 - 🎮 **A controller is needed to play.** Touch only works in the menus
 
 ## 🐞 Help me test

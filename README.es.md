@@ -55,9 +55,9 @@ La interfaz muestra la versión y el build de la app, por ejemplo `0.3.9 (23)`. 
 
 ## 📱 ¿Funcionará en mi dispositivo?
 
-- ✅ **Probado (0.3.9):** iPhone 13 Pro Max (~3 GB concedidos), iOS 27: 17 bots, una partida de unos 9 minutos y luego iOS cerró la app con pocos MiB libres. iPad Pro/Air M1 (5,1 GB concedidos): 17 bots, 4-5 partidas seguidas en el mismo mapa, 35-48 FPS. iPhone 17 Pro Max (6 GB concedidos): partidas completas con bots, según treuenten
+- ✅ **Probado (0.3.9):** iPhone 13 Pro Max (~3 GB concedidos), iOS 27: 17 bots, una partida de unos 9 minutos y luego iOS cerró la app con pocos MiB libres. iPad Pro/Air M1 (5,1 GB concedidos): 17 bots, 4-5 partidas seguidas (la última en Afghan terminó con la app cerrada), 35-48 FPS. iPhone 17 Pro Max (6 GB concedidos): partidas completas con bots, según treuenten
 - ❓ **Todo lo demás no está verificado.** Técnicamente debería funcionar en cualquier iPhone o iPad con Metal; la app declara iOS 15 como mínimo, pero nunca la probé ahí
-- 🧠 **La memoria es el límite.** La app no devuelve memoria entre partidas. En un teléfono con unos 3 GB una partida larga ya puede cerrarla; en el iPad M1 (5,1 GB) se acabó en la 4.ª-5.ª partida, al cargar un mapa más grande (Afghan). Cierra la app entre sesiones. Con unos 3 GB prueba Render scale de 0.3 a 0.5 y pocos bots. Arreglarlo es el primer objetivo de 0.4.0.
+- 🧠 **La memoria es el límite y depende del mapa.** Tras la primera partida queda ocupado cerca de 1 GB (no crece con las siguientes). Los mapas grandes (Afghan, Terminal) necesitan unos 1,7 GB más al cargar: en el iPad M1 (5,1 GB) solo quedaban libres 40-290 MiB, incluso con la app recién abierta. En un teléfono con unos 3 GB una partida larga en un mapa pequeño ya puede cerrar la app. Con unos 3 GB prueba Render scale de 0.3 a 0.5 y pocos bots. Arreglarlo es el primer objetivo de 0.4.0.
 - 🎮 **Se necesita un mando para jugar.** El toque solo funciona en los menús
 
 ## 🐞 Ayúdame a probar
