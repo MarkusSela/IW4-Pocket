@@ -1,8 +1,8 @@
 # IW4 Pocket 0.3.9 — build 23
 
-**Experimental prerelease. Not verified on a phone.** This build does not claim to fix the memory crash: that is still unproven.
+**Stable release, with a known limit: memory.** Tried on an iPhone 13 Pro Max (about 3 GB granted): 17 bots, one match of about 9 minutes, then iOS closed the app. Tried on an M1 iPad (5.1 GB granted): 4-5 matches in a row, then the memory ran out while loading a bigger map. The app does not give memory back between matches; 0.4.0 works on that first.
 
-0.3.9 is a stability release. It fixes problems found by reading the 0.3.8 code and its first real logs. Nothing below has been tried on a device.
+0.3.9 is a stability release. It fixes problems found by reading the 0.3.8 code and its first real logs. Selective weapon loading now starts (it never did in 0.3.8), but it saves little: the weapon models skipped were about 10% of the total.
 
 ## Selective weapon loading (it never ran in 0.3.8)
 - In the 0.3.8 log the feature fell back to loading everything: `selective weapons FAILED -> full preload: unknown weapon "t5:weapon/spectre_mp"`. The class presets name weapons of games that are not installed, and one such name cancelled the whole selection. Weapons of a game that is not installed are now skipped (one log line lists them); an unknown weapon of an installed game is still an error and still falls back, visibly.

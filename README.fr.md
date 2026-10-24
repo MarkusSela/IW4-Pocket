@@ -55,9 +55,9 @@ L'interface affiche la version et le build de l'app, par exemple `0.3.9 (23)`. *
 
 ## 📱 Est-ce que ça marchera sur mon appareil ?
 
-- ✅ **Testé :** iPhone 13 Pro Max (6 Go de RAM, ~3 Go accordés), iOS 27 : les menus fonctionnent, le chargement de la carte va jusqu'aux shaders. iPhone 17 Pro Max (6 Go accordés) : parties complètes avec bots, selon treuenten
+- ✅ **Testé (0.3.9) :** iPhone 13 Pro Max (~3 Go accordés), iOS 27 : 17 bots, une partie d'environ 9 minutes, puis iOS a fermé l'app avec quelques Mio restants. iPad Pro/Air M1 (5,1 Go accordés) : 17 bots, 4-5 parties de suite sur la même carte, 35-48 FPS. iPhone 17 Pro Max (6 Go accordés) : parties complètes avec bots, selon treuenten
 - ❓ **Tout le reste n'est pas vérifié.** Techniquement, cela devrait fonctionner sur tout iPhone ou iPad avec Metal ; l'app déclare iOS 15 comme minimum, mais je ne l'y ai jamais essayée
-- 🧠 **La mémoire est la limite.** Sur le téléphone testé, iOS accorde à l'app environ 3 Go. Les appareils avec moins de RAM échoueront plus tôt ; les plus intéressants à tester sont les iPhone 8 Go+ et les iPad à puce M Avec environ 3 Go, essayez Render scale 0.67 ou 0.5.
+- 🧠 **La mémoire est la limite.** L'app ne rend pas la mémoire entre les parties. Sur un téléphone avec environ 3 Go, une longue partie peut déjà la fermer ; sur l'iPad M1 (5,1 Go) elle s'est épuisée à la 4e-5e partie, au chargement d'une carte plus grande (Afghan). Fermez l'app entre les sessions. Avec environ 3 Go, essayez Render scale de 0.3 à 0.5 et peu de bots. Corriger cela est le premier objectif de 0.4.0.
 - 🎮 **Une manette est nécessaire pour jouer.** Le toucher ne marche que dans les menus
 
 ## 🐞 Aidez-moi à tester
