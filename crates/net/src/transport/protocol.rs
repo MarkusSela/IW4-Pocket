@@ -817,31 +817,15 @@ impl ConnectionTable {
     /// (`MAX_SESSION_MEMBERS`). Ids of retired connections are reused: client ids double as
     /// entity numbers (corpses start at 18, the collision world holds 1024), so an id that
     /// only ever grows eventually collides with them after enough joins and leaves.
-    /// Only when every id below the cap is taken does it fall back to counting up, with a
-    /// warning, so the caller still gets an id instead of a refusal.
-    pub fn accept_new(&mut self, occupied: &[u32]) -> (ConnectionId, u32) {
+    /// Refuses a connection when every client id below `MAX_SESSION_MEMBERS` is occupied.
+    pub fn accept_new(&mut self, occupied: &[u32]) -> Option<(ConnectionId, u32)> {
         let cap = u32::from(master_protocol::MAX_SESSION_MEMBERS);
         let in_use = |id: u32| occupied.contains(&id) || self.assigned.values().any(|a| *a == id);
-        let reused = (self.first_client..cap).find(|id| !in_use(*id));
-        let client = match reused {
-            Some(id) => id,
-            None => {
-                while in_use(self.next_client) {
-                    self.next_client = self.next_client.wrapping_add(1);
-                }
-                let id = self.next_client;
-                self.next_client = self.next_client.wrapping_add(1);
-                diag::warn!(
-                    Net,
-                    "client ids below {cap} are all taken; giving id {id} (may overlap corpse entities)"
-                );
-                id
-            }
-        };
+        let client = (self.first_client..cap).find(|id| !in_use(*id))?;
         self.next_conn = self.next_conn.wrapping_add(1);
         let conn = ConnectionId(self.next_conn);
         self.assigned.insert(conn, client);
-        (conn, client)
+        Some((conn, client))
     }
 
     pub fn resolve(
@@ -890,7 +874,7 @@ mod connection_table_tests {
         let mut table = ConnectionTable::starting_at(1);
         // Many join/leave cycles with one other member present: never an id >= 18.
         for _ in 0..200 {
-            let (conn, id) = table.accept_new(&[0]);
+            let (conn, id) = table.accept_new(&[0]).expect("slot available");
             assert!(id >= 1 && id < 18, "id {id} escaped the participant cap");
             assert_eq!(table.retire(conn), Some(id));
         }
@@ -899,11 +883,11 @@ mod connection_table_tests {
     #[test]
     fn ids_are_lowest_free_and_skip_occupied_and_assigned() {
         let mut table = ConnectionTable::starting_at(1);
-        let (a, ia) = table.accept_new(&[0, 2]);
-        let (_b, ib) = table.accept_new(&[0, 2]);
+        let (a, ia) = table.accept_new(&[0, 2]).expect("slot available");
+        let (_b, ib) = table.accept_new(&[0, 2]).expect("slot available");
         assert_eq!((ia, ib), (1, 3));
         table.retire(a);
-        let (_c, ic) = table.accept_new(&[0, 2]);
+        let (_c, ic) = table.accept_new(&[0, 2]).expect("slot available");
         assert_eq!(ic, 1, "the freed id comes back first");
     }
 
@@ -912,15 +896,15 @@ mod connection_table_tests {
         let mut table = ConnectionTable::starting_at(1);
         // Bots hold 1..=8 but are not on the scoreboard: they arrive as `occupied`.
         let reserved: Vec<u32> = (1..=8).collect();
-        let (_conn, id) = table.accept_new(&reserved);
+        let (_conn, id) = table.accept_new(&reserved).expect("slot available");
         assert_eq!(id, 9, "the first id after the bots");
     }
 
     #[test]
-    fn a_full_table_still_hands_out_an_id() {
+    fn a_full_table_refuses_another_connection_without_mutating_assignments() {
         let mut table = ConnectionTable::starting_at(1);
-        let occupied: Vec<u32> = (0..18).collect();
-        let (_conn, id) = table.accept_new(&occupied);
-        assert!(id >= 18, "all ids below 18 are occupied");
+        let occupied: Vec<u32> = (0..master_protocol::MAX_SESSION_MEMBERS.into()).collect();
+        assert_eq!(table.accept_new(&occupied), None);
+        assert_eq!(table.clients().count(), 0);
     }
 }
