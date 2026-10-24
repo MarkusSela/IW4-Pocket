@@ -58,6 +58,8 @@ pub(crate) struct Heli {
     on_target: bool,
     gunner: Option<u32>,
     next_fire_ms: i32,
+    next_fire_diag_ms: i32,
+    next_native_diag_ms: i32,
 }
 
 #[derive(Clone, Debug)]
@@ -134,6 +136,8 @@ impl Default for Heli {
             on_target: false,
             gunner: None,
             next_fire_ms: 0,
+            next_fire_diag_ms: 0,
+            next_native_diag_ms: 0,
         }
     }
 }
@@ -227,14 +231,56 @@ fn fire_weapon(world: &mut World, receiver: &Value, args: &[Value]) -> Result<Va
         })
         .map_or(heading, |d| d.to_array());
     if bullet {
-        super::turrets::fire_bullet(world, id, from, dir, weapon, owner.map(crate::ClientId));
+        let outcome = super::turrets::fire_bullet(world, id, from, dir, weapon, owner.map(crate::ClientId));
+        let now = crate::level_time_ms(world.resource::<crate::step::StepRequest>().tick);
+        let should_log = {
+            let heli = heli(world, receiver)?;
+            if now < heli.next_native_diag_ms {
+                false
+            } else {
+                heli.next_native_diag_ms = now + 500;
+                true
+            }
+        };
+        if should_log {
+            let weapon_name = crate::frame::FrameWorld::from_world(world)
+                .weapon_script_name(weapon)
+                .to_owned();
+            diag::info!(
+                Sim,
+                "heli_fireweapon: id={id} kind=bullet weapon={weapon_name}({weapon}) hit={} damage={:?}",
+                outcome.hit,
+                outcome.damage
+            );
+        }
         return Ok(Value::Undefined);
     }
     let owner = owner
         .filter(|client| world.resource::<Runtime>().players.contains_key(client))
         .ok_or("vehicle owner is not connected")?;
     let end = std::array::from_fn(|i| from[i] + dir[i] * 1000.0);
-    super::weapons::launch(world, crate::ClientId(owner), weapon, from, end)
+    let launched = super::weapons::launch(world, crate::ClientId(owner), weapon, from, end);
+    let now = crate::level_time_ms(world.resource::<crate::step::StepRequest>().tick);
+    let should_log = {
+        let heli = heli(world, receiver)?;
+        if now < heli.next_native_diag_ms {
+            false
+        } else {
+            heli.next_native_diag_ms = now + 500;
+            true
+        }
+    };
+    if should_log {
+        let weapon_name = crate::frame::FrameWorld::from_world(world)
+            .weapon_script_name(weapon)
+            .to_owned();
+        diag::info!(
+            Sim,
+            "heli_fireweapon: id={id} kind=missile weapon={weapon_name}({weapon}) launched={}",
+            launched.is_ok()
+        );
+    }
+    launched
 }
 
 fn vec_field(runtime: &mut Runtime, object: u64, name: &str) -> [f32; 3] {
@@ -279,8 +325,14 @@ fn spawn_vehicle(
     if let Some(mut flight) = flight {
         flight.slot = slot.unwrap();
         flight.heading = math_iw4::angle_vectors(angles).0;
+        let owner = flight.owner;
+        let weapon = flight.weapon;
         runtime.set_object_field(id, "veh_speed", Value::Float(0.0));
         runtime.vehicles.insert(id, flight);
+        diag::info!(
+            Sim,
+            "heli_spawn: id={id} type={classname} model={model} weapon={weapon:?} owner={owner:?}"
+        );
     }
     Ok(Value::Object(id))
 }
@@ -994,9 +1046,20 @@ pub(crate) fn advance(world: &mut World) {
         let fire_ms = weapon
             .and_then(|weapon| crate::frame::FrameWorld::from_world(world).combat_facts_for(weapon))
             .map_or(100, |facts| facts.fire_time_ms.max(1));
+        let weapon_name = crate::frame::FrameWorld::from_world(world)
+            .weapon_script_name(weapon.unwrap_or(0))
+            .to_owned();
+        let tick = world.resource::<crate::step::StepRequest>().tick.0;
         let mut runtime = world.resource_mut::<Runtime>();
         if !runtime.entities.contains_key(&id) {
-            runtime.vehicles.remove(&id);
+            if let Some(heli) = runtime.vehicles.remove(&id) {
+                diag::info!(
+                    Sim,
+                    "heli_despawn: id={id} weapon={:?} owner={:?}",
+                    heli.weapon,
+                    heli.owner
+                );
+            }
             continue;
         }
         let origin = vec_field(&mut runtime, id, "origin");
@@ -1117,6 +1180,21 @@ pub(crate) fn advance(world: &mut World) {
                 if attack && now >= heli.next_fire_ms {
                     heli.next_fire_ms = now + fire_ms;
                     notes.push("turret_fire");
+                    if now >= heli.next_fire_diag_ms {
+                        heli.next_fire_diag_ms = now + 500;
+                        let target = match heli.turret {
+                            Some(TurretAim::Entity(..)) => "entity",
+                            Some(TurretAim::Point(..)) => "point",
+                            None => "none",
+                        };
+                        diag::info!(
+                            Sim,
+                            "heli_fire: tick={tick} id={id} gunner={:?} attack={attack} weapon={weapon_name}({:?}) now_ms={now} next_fire_ms={} target={target} note=turret_fire",
+                            heli.gunner,
+                            weapon,
+                            heli.next_fire_ms
+                        );
+                    }
                 }
             }
             None if heli.gunner.is_some() => {
