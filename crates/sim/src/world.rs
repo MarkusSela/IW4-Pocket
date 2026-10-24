@@ -4197,5 +4197,6 @@ mod area_entity_num_tests {
         world.set_client_rank_prestige(client, 79, 10);
         let meta = world.client_meta(client).unwrap();
         assert_eq!((meta.rank, meta.prestige), (79, 10));
+        assert!(meta.rank_pinned);
     }
 }

@@ -134,6 +134,9 @@ pub struct ClientMatchState {
 
     pub(crate) rank: i32,
     pub(crate) prestige: i32,
+    /// Set for a bot whose level the host chose: the game's own `setrank` call at
+    /// connect (it reads a zeroed profile for a bot) must not overwrite it.
+    pub(crate) rank_pinned: bool,
     pub(crate) player_card_icon: u32,
     pub(crate) player_card_title: u32,
     pub(crate) player_card_nameplate: u32,

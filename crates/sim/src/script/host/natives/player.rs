@@ -436,8 +436,10 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         let mut frame = FrameWorld::from_world(world);
         if frame.client_meta(ClientId(client)).is_some() {
             let meta = frame.client_meta_mut(ClientId(client));
-            meta.rank = rank;
-            meta.prestige = prestige;
+            if !meta.rank_pinned {
+                meta.rank = rank;
+                meta.prestige = prestige;
+            }
         }
         Ok(Value::Undefined)
     });

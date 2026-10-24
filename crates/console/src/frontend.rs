@@ -722,7 +722,7 @@ pub(crate) fn route(
         // The humans listed so far leave this many seats; a larger request shows fewer.
         // Not logged here: this runs every frame, the roster logs the real refusal.
         let shown = wanted.min(bots::bot_room_for(lobby_names.len() as u32));
-        lobby_names.extend(bots::lobby_bot_names(shown).into_iter().map(str::to_owned));
+        lobby_names.extend(bots::lobby_bot_labels(shown));
         dvars.set(
             "ui_lobby_players",
             format!("PLAYERS: {} / {}", lobby_names.len(), bots::MAX_PARTICIPANTS),

@@ -349,6 +349,32 @@ pub fn lobby_bot_names(count: u32) -> Vec<&'static str> {
         .collect()
 }
 
+/// The text of one lobby row: the bot's name and the level it will have in the match
+/// (`Lv1` is rank 0), with its prestige when it has one.
+fn lobby_label(identity: &BotIdentity) -> String {
+    if identity.prestige > 0 {
+        format!(
+            "{}  P{} Lv{}",
+            identity.name,
+            identity.prestige,
+            identity.rank + 1
+        )
+    } else {
+        format!("{}  Lv{}", identity.name, identity.rank + 1)
+    }
+}
+
+/// `lobby_bot_names` with each bot's level, for the lobby list. The same prefix of the
+/// same draw: the names and levels shown are the ones the match will use.
+pub fn lobby_bot_labels(count: u32) -> Vec<String> {
+    lock_draw()
+        .get_or_insert_with(draw_identities)
+        .iter()
+        .take(count as usize)
+        .map(lobby_label)
+        .collect()
+}
+
 /// Forget the current order; the next lobby draws its own. Only a new lobby calls this.
 pub fn reset_lobby_names() {
     *lock_draw() = None;
@@ -655,6 +681,13 @@ mod name_tests {
             with_tag("NoScopeNoBitche", &mut || too_long_draw.next().unwrap()),
             "NoScopeNoBitche"
         );
+    }
+
+    #[test]
+    fn lobby_label_shows_level_and_prestige() {
+        assert_eq!(lobby_label(&BotIdentity::new("Yeet", 0, 0)), "Yeet  Lv1");
+        assert_eq!(lobby_label(&BotIdentity::new("Yeet", 69, 0)), "Yeet  Lv70");
+        assert_eq!(lobby_label(&BotIdentity::new("Yeet", 69, 3)), "Yeet  P3 Lv70");
     }
 
     #[test]

@@ -98,6 +98,7 @@ impl SimWorld {
         let meta = self.client_meta_mut(id);
         meta.rank = rank;
         meta.prestige = prestige;
+        meta.rank_pinned = true;
     }
 
     pub fn persistent_data(&self) -> &crate::PersistentDataStore {
