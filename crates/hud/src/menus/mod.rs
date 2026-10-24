@@ -344,6 +344,10 @@ pub(crate) fn update_script_menus(
             && event.state.is_pressed()
             && let Some(text) = &event.text
         {
+            #[cfg(target_os = "ios")]
+            if text.chars().any(|ch| matches!(ch, '\n' | '\r')) {
+                pressed.enter = true;
+            }
             pressed.text.push(text.to_string());
         }
     }
@@ -635,36 +639,43 @@ fn handle_input(
             }
             return;
         }
-        if pressed.home {
-            edit.cursor = 0;
-        }
-        if pressed.end {
-            edit.cursor = edit.buffer.len();
-        }
-        if pressed.left {
-            edit.cursor = edit.cursor.saturating_sub(1);
-        }
-        if pressed.right {
-            edit.cursor = (edit.cursor + 1).min(edit.buffer.len());
-        }
-        if pressed.backspace && edit.cursor > 0 {
-            edit.cursor -= 1;
-            edit.buffer.remove(edit.cursor);
-        }
-        if pressed.delete && edit.cursor < edit.buffer.len() {
-            edit.buffer.remove(edit.cursor);
-        }
-        for text in &pressed.text {
-            for ch in text.chars().filter(|ch| !ch.is_control()) {
-                if edit.buffer.len() >= edit.max_chars {
-                    break;
-                }
-                edit.buffer.insert(edit.cursor, ch);
-                edit.cursor += 1;
+        // A subsequent tap cancels the pending edit before handling that tap as
+        // normal menu input. This lets a menu Back button close the dialog and
+        // makes a tap away from the field dismiss the iOS keyboard.
+        if pointer && input.mouse.just_pressed(MouseButton::Left) {
+            // Leave `editing` as None and continue to the pointer handler.
+        } else {
+            if pressed.home {
+                edit.cursor = 0;
             }
+            if pressed.end {
+                edit.cursor = edit.buffer.len();
+            }
+            if pressed.left {
+                edit.cursor = edit.cursor.saturating_sub(1);
+            }
+            if pressed.right {
+                edit.cursor = (edit.cursor + 1).min(edit.buffer.len());
+            }
+            if pressed.backspace && edit.cursor > 0 {
+                edit.cursor -= 1;
+                edit.buffer.remove(edit.cursor);
+            }
+            if pressed.delete && edit.cursor < edit.buffer.len() {
+                edit.buffer.remove(edit.cursor);
+            }
+            for text in &pressed.text {
+                for ch in text.chars().filter(|ch| !ch.is_control()) {
+                    if edit.buffer.len() >= edit.max_chars {
+                        break;
+                    }
+                    edit.buffer.insert(edit.cursor, ch);
+                    edit.cursor += 1;
+                }
+            }
+            runner.menus.editing = Some(edit);
+            return;
         }
-        runner.menus.editing = Some(edit);
-        return;
     }
     if pressed.escape {
         match runner.menus.input_menu().map(|m| m.name.clone()) {

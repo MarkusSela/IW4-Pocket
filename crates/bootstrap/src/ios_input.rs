@@ -22,7 +22,21 @@ impl Plugin for IosInputPlugin {
         app.add_systems(
             PreUpdate,
             (poll_controllers, touch_as_mouse).before(InputSystems),
-        );
+        )
+        .add_systems(Update, sync_edit_field_ime);
+    }
+}
+
+fn sync_edit_field_ime(
+    menus: Option<Res<hud::ScriptMenus>>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+) {
+    let active = menus.is_some_and(|menus| menus.edit_field_active());
+    let Ok(mut window) = windows.single_mut() else {
+        return;
+    };
+    if window.ime_enabled != active {
+        window.ime_enabled = active;
     }
 }
 

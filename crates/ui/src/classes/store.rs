@@ -405,3 +405,34 @@ pub(crate) fn save_class_store(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn slot(name: &str) -> ClassSlotState {
+        ClassSlotState {
+            name: name.to_owned(),
+            primary: "iw4:weapon/m4_mp".into(),
+            primary_attachments: vec!["reflex".into()],
+            secondary: "iw4:weapon/usp_mp".into(),
+            secondary_attachments: Vec::new(),
+            lethal: "iw4:weapon/frag_grenade_mp".into(),
+            tactical: "iw4:weapon/flash_grenade_mp".into(),
+            perk1: "specialty_fastreload".into(),
+            perk2: "specialty_bulletdamage".into(),
+            perk3: "specialty_bulletaccuracy".into(),
+            deathstreak: "specialty_copycat".into(),
+            camos: Default::default(),
+            lock_reason: None,
+        }
+    }
+
+    #[test]
+    fn renamed_class_name_survives_persistence() {
+        let encoded = encode_slots(&[slot("Mobile class")]);
+        let decoded = decode_slots(&encoded).expect("encoded class store should decode");
+
+        assert_eq!(decoded[0].name, "Mobile class");
+    }
+}

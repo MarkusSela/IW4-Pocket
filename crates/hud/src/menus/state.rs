@@ -43,6 +43,10 @@ pub struct ScriptMenus {
 }
 
 impl ScriptMenus {
+    pub fn edit_field_active(&self) -> bool {
+        self.editing.is_some()
+    }
+
     pub fn captures_input(&self) -> bool {
         self.input_menu().is_some()
     }

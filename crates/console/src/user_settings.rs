@@ -621,3 +621,22 @@ pub(crate) fn native_menu_settings(
         settings.pad_deadzone_right.to_string(),
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn player_name_round_trips_through_settings_file() {
+        let mut settings = frame::GameSettings::default();
+        settings.player_name = "Pocket Player".to_owned();
+        let serialized = serialize_settings(&settings, &KeyBinds::default());
+        let mut restored = frame::GameSettings::default();
+        let mut binds = KeyBinds::default();
+
+        parse_settings(&serialized, &mut restored, &mut binds);
+
+        assert!(serialized.contains("player_name=Pocket Player"));
+        assert_eq!(restored.player_name, "Pocket Player");
+    }
+}
