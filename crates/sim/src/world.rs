@@ -4189,4 +4189,13 @@ mod area_entity_num_tests {
             assert_eq!(SimState::area_entity_num(ClientId(id)), None);
         }
     }
+
+    #[test]
+    fn client_rank_and_prestige_are_exposed_in_authoritative_metadata() {
+        let mut world = SimWorld::default();
+        let client = ClientId(7);
+        world.set_client_rank_prestige(client, 79, 10);
+        let meta = world.client_meta(client).unwrap();
+        assert_eq!((meta.rank, meta.prestige), (79, 10));
+    }
 }

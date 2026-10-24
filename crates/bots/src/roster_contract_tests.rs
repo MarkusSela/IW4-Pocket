@@ -2,16 +2,24 @@
 //! Compiled only by `cargo test -p bots`; exercises the real roster with an explicit
 //! name order, so no test touches the shared lobby draw.
 
-use crate::roster::{BotRoster, MAX_HOST_BOTS, MAX_PARTICIPANTS};
+use crate::roster::{BotIdentity, BotRoster, MAX_HOST_BOTS, MAX_PARTICIPANTS};
 use sim::ClientId;
 
-const ORDER: [&str; 20] = [
-    "n00", "n01", "n02", "n03", "n04", "n05", "n06", "n07", "n08", "n09", "n10", "n11", "n12",
-    "n13", "n14", "n15", "n16", "n17", "n18", "n19",
+const ORDER: [BotIdentity; 20] = [
+    BotIdentity::new("n00", 0, 0), BotIdentity::new("n01", 1, 0),
+    BotIdentity::new("n02", 2, 0), BotIdentity::new("n03", 3, 0),
+    BotIdentity::new("n04", 4, 0), BotIdentity::new("n05", 5, 0),
+    BotIdentity::new("n06", 6, 0), BotIdentity::new("n07", 7, 0),
+    BotIdentity::new("n08", 8, 0), BotIdentity::new("n09", 9, 0),
+    BotIdentity::new("n10", 10, 1), BotIdentity::new("n11", 11, 1),
+    BotIdentity::new("n12", 12, 1), BotIdentity::new("n13", 13, 1),
+    BotIdentity::new("n14", 14, 1), BotIdentity::new("n15", 15, 1),
+    BotIdentity::new("n16", 16, 1), BotIdentity::new("n17", 17, 1),
+    BotIdentity::new("n18", 18, 1), BotIdentity::new("n19", 19, 1),
 ];
 
 fn add(roster: &mut BotRoster, count: u32, taken: &[ClientId]) -> usize {
-    roster.add_bots_named(count, taken, true, &ORDER).len()
+    roster.add_bots_with_identities(count, taken, true, &ORDER).len()
 }
 
 /// What the host passes as `taken`: the local player plus the bots on the scoreboard.
@@ -114,24 +122,50 @@ fn names_stay_with_their_bots_across_removal_and_addition() {
     let mut roster = BotRoster::default();
     let human = [ClientId(0)];
     add(&mut roster, 5, &human);
-    let names: Vec<_> = roster.bots.iter().map(|b| b.name).collect();
-    assert_eq!(names, ORDER[..5]);
+    let identities: Vec<_> = roster
+        .bots
+        .iter()
+        .map(|b| BotIdentity::new(b.name, b.rank, b.prestige))
+        .collect();
+    assert_eq!(identities, ORDER[..5]);
 
     // Adding never renames: the newcomer takes the next name in the order.
     add(&mut roster, 1, &human);
-    assert_eq!(roster.bots[..5].iter().map(|b| b.name).collect::<Vec<_>>(), names);
-    assert_eq!(roster.bots[5].name, "n05");
+    assert_eq!(
+        roster.bots[..5]
+            .iter()
+            .map(|b| BotIdentity::new(b.name, b.rank, b.prestige))
+            .collect::<Vec<_>>(),
+        identities
+    );
+    assert_eq!(
+        BotIdentity::new(
+            roster.bots[5].name,
+            roster.bots[5].rank,
+            roster.bots[5].prestige,
+        ),
+        ORDER[5]
+    );
 
     // Removing from the middle keeps everyone else's name, and the freed name is
     // handed out again before any later one.
     let removed = roster.bots.remove(2);
-    assert_eq!(removed.name, "n02");
-    let survivors: Vec<_> = roster.bots.iter().map(|b| (b.id, b.name)).collect();
+    assert_eq!(BotIdentity::new(removed.name, removed.rank, removed.prestige), ORDER[2]);
+    let survivors: Vec<_> = roster
+        .bots
+        .iter()
+        .map(|b| (b.id, BotIdentity::new(b.name, b.rank, b.prestige)))
+        .collect();
     add(&mut roster, 1, &human);
-    for (id, name) in survivors {
-        assert_eq!(roster.bots.iter().find(|b| b.id == id).unwrap().name, name);
+    for (id, identity) in survivors {
+        let bot = roster.bots.iter().find(|b| b.id == id).unwrap();
+        assert_eq!(BotIdentity::new(bot.name, bot.rank, bot.prestige), identity);
     }
-    assert_eq!(roster.bots.last().unwrap().name, "n02");
+    let replacement = roster.bots.last().unwrap();
+    assert_eq!(
+        BotIdentity::new(replacement.name, replacement.rank, replacement.prestige),
+        ORDER[2]
+    );
 }
 
 #[test]

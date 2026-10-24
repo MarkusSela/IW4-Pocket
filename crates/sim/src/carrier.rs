@@ -93,6 +93,13 @@ impl SimWorld {
         Self::default()
     }
 
+    /// Sets the authoritative rank metadata that snapshots expose to HUD clients.
+    pub fn set_client_rank_prestige(&mut self, id: ClientId, rank: i32, prestige: i32) {
+        let meta = self.client_meta_mut(id);
+        meta.rank = rank;
+        meta.prestige = prestige;
+    }
+
     pub fn persistent_data(&self) -> &crate::PersistentDataStore {
         self.ecs.resource::<crate::PersistentDataStore>()
     }

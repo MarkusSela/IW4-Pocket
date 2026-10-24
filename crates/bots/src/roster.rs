@@ -170,6 +170,11 @@ const BOT_NAMES: &[&str] = &[
 // Keep the full pool above, but use the same explicit 15-byte display name in
 // the lobby and authoritative game state (including the two longer names).
 const BOT_NAME_BYTES: usize = 15;
+/// MW2 rank rows are indexed from 0 through 79.
+pub const MAX_BOT_RANK: i32 = 79;
+/// MW2 exposes ten prestige emblems in addition to no prestige.
+pub const MAX_BOT_PRESTIGE: i32 = 10;
+const MIN_PRESTIGE_RANK: i32 = 50;
 
 fn display_name(name: &'static str) -> &'static str {
     &name[..name.len().min(BOT_NAME_BYTES)]
@@ -203,7 +208,9 @@ const CLAN_TAGS: &[&str] = &[
 ];
 
 /// Probability (in tenths) that a name that has room for one gets a tag.
-const TAG_CHANCE_TENTHS: u64 = 7;
+const TAG_CHANCE_TENTHS: u64 = 9;
+/// `[IRS]` deliberately occurs more often than the other joke tags.
+const IRS_TAG_WEIGHT: u64 = 8;
 
 fn entropy_seed() -> u64 {
     let mut entropy = [0u8; 8];
@@ -258,26 +265,74 @@ fn with_tag(name: &'static str, random: &mut impl FnMut() -> u64) -> &'static st
     if fitting.is_empty() {
         return name;
     }
-    let tag = fitting[(random() % fitting.len() as u64) as usize];
+    let total_weight: u64 = fitting
+        .iter()
+        .map(|tag| if *tag == "IRS" { IRS_TAG_WEIGHT } else { 1 })
+        .sum();
+    let mut choice = random() % total_weight;
+    let tag = fitting
+        .into_iter()
+        .find(|tag| {
+            let weight = if *tag == "IRS" { IRS_TAG_WEIGHT } else { 1 };
+            if choice < weight {
+                true
+            } else {
+                choice -= weight;
+                false
+            }
+        })
+        .expect("a non-empty tag list has positive weight");
     intern(format!("[{tag}]{name}"))
 }
 
-/// A fresh random order of the whole pool, each name with or without a clan tag.
-fn draw_names() -> Vec<&'static str> {
+/// An immutable identity drawn once for each lobby.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BotIdentity {
+    pub name: &'static str,
+    pub rank: i32,
+    pub prestige: i32,
+}
+
+impl BotIdentity {
+    pub const fn new(name: &'static str, rank: i32, prestige: i32) -> Self {
+        Self {
+            name,
+            rank,
+            prestige,
+        }
+    }
+}
+
+fn draw_rank_prestige(random: &mut impl FnMut() -> u64) -> (i32, i32) {
+    let rank = (random() % (MAX_BOT_RANK as u64 + 1)) as i32;
+    let prestige = if rank < MIN_PRESTIGE_RANK || random() % 10 < 6 {
+        0
+    } else {
+        (random() % MAX_BOT_PRESTIGE as u64 + 1) as i32
+    };
+    (rank, prestige)
+}
+
+/// A fresh random order of the whole pool, each name with a matching rank and prestige.
+fn draw_identities() -> Vec<BotIdentity> {
     let mut names: Vec<_> = BOT_NAMES.iter().map(|name| display_name(name)).collect();
     let mut state = entropy_seed();
     shuffle_names(&mut names, || splitmix(&mut state));
     names
         .into_iter()
-        .map(|name| with_tag(name, &mut || splitmix(&mut state)))
+        .map(|name| {
+            let name = with_tag(name, &mut || splitmix(&mut state));
+            let (rank, prestige) = draw_rank_prestige(&mut || splitmix(&mut state));
+            BotIdentity::new(name, rank, prestige)
+        })
         .collect()
 }
 
 /// The random name order of the current lobby, drawn on first use. Bot `n` takes the
 /// `n`-th name, so changing the count never renames the bots that stay.
-static DRAW: std::sync::Mutex<Option<Vec<&'static str>>> = std::sync::Mutex::new(None);
+static DRAW: std::sync::Mutex<Option<Vec<BotIdentity>>> = std::sync::Mutex::new(None);
 
-fn lock_draw() -> std::sync::MutexGuard<'static, Option<Vec<&'static str>>> {
+fn lock_draw() -> std::sync::MutexGuard<'static, Option<Vec<BotIdentity>>> {
     DRAW.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -286,9 +341,9 @@ fn lock_draw() -> std::sync::MutexGuard<'static, Option<Vec<&'static str>>> {
 /// match then takes exactly these names.
 pub fn lobby_bot_names(count: u32) -> Vec<&'static str> {
     lock_draw()
-        .get_or_insert_with(draw_names)
+        .get_or_insert_with(draw_identities)
         .iter()
-        .copied()
+        .map(|identity| identity.name)
         .take(count as usize)
         .collect()
 }
@@ -300,8 +355,8 @@ pub fn reset_lobby_names() {
 
 /// The current order, drawn on first use. Bots added in a match (also by console
 /// command) follow it without redrawing it.
-fn match_names() -> Vec<&'static str> {
-    lock_draw().get_or_insert_with(draw_names).clone()
+fn match_identities() -> Vec<BotIdentity> {
+    lock_draw().get_or_insert_with(draw_identities).clone()
 }
 
 #[derive(Resource, Debug, Default)]
@@ -391,6 +446,8 @@ impl BotFireQueue {
 pub struct BotSlot {
     pub id: ClientId,
     pub name: &'static str,
+    pub rank: i32,
+    pub prestige: i32,
     pub account: sim::AccountId,
     pub brain: Option<HostController>,
     pub joined: bool,
@@ -442,17 +499,17 @@ impl BotRoster {
     // the player, and the slot is dead weight because no system can drive an
     // id someone else is already playing.
     pub fn add_bots(&mut self, count: u32, taken: &[ClientId], dummy: bool) -> Vec<ClientId> {
-        self.add_bots_named(count, taken, dummy, &match_names())
+        self.add_bots_with_identities(count, taken, dummy, &match_identities())
     }
 
-    /// `add_bots` with an explicit name order. Each new bot takes the first name no
-    /// present bot uses, so earlier bots keep theirs.
-    pub(crate) fn add_bots_named(
+    /// `add_bots` with an explicit identity order. Each new bot takes the first identity no
+    /// present bot uses, so earlier bots keep their identity.
+    pub(crate) fn add_bots_with_identities(
         &mut self,
         count: u32,
         taken: &[ClientId],
         dummy: bool,
-        names: &[&'static str],
+        identities: &[BotIdentity],
     ) -> Vec<ClientId> {
         // Capped by the free slots at this moment, so requests made in one frame share
         // the same limit: each one sees the bots the previous one added.
@@ -472,14 +529,16 @@ impl BotRoster {
             }
             let brain = (!dummy)
                 .then(|| HostController::new(seed ^ (u64::from(id.0) << 32) ^ u64::from(i)));
-            let name = names
+            let identity = identities
                 .iter()
                 .copied()
-                .find(|name| !self.bots.iter().any(|bot| bot.name == *name))
-                .unwrap_or("bot");
+                .find(|identity| !self.bots.iter().any(|bot| bot.name == identity.name))
+                .unwrap_or(BotIdentity::new("bot", 0, 0));
             self.bots.push(BotSlot {
                 id,
-                name,
+                name: identity.name,
+                rank: identity.rank,
+                prestige: identity.prestige,
                 account: sim::AccountId(account),
                 brain,
                 joined: false,
@@ -566,22 +625,51 @@ mod name_tests {
         }
         let originals: std::collections::HashSet<_> =
             BOT_NAMES.iter().map(|name| display_name(name)).collect();
-        let mut tagged = 0;
-        for _ in 0..40 {
-            let drawn = draw_names();
-            assert_eq!(drawn.len(), BOT_NAMES.len());
-            let mut bases = std::collections::HashSet::new();
-            for name in &drawn {
-                assert!(name.is_ascii() && name.len() <= BOT_NAME_BYTES, "{name}");
-                assert!(originals.contains(untagged(name)), "{name}");
-                assert!(bases.insert(untagged(name)), "base name used twice: {name}");
-                let packed = entity_iw4::pack_client_state_name(name);
-                assert_eq!(&packed[..name.len()], name.as_bytes());
-                tagged += usize::from(untagged(name) != *name);
-            }
-            assert_eq!(bases, originals);
+        let drawn = draw_identities();
+        assert_eq!(drawn.len(), BOT_NAMES.len());
+        let mut bases = std::collections::HashSet::new();
+        for identity in &drawn {
+            let name = identity.name;
+            assert!(name.is_ascii() && name.len() <= BOT_NAME_BYTES, "{name}");
+            assert!(originals.contains(untagged(name)), "{name}");
+            assert!(bases.insert(untagged(name)), "base name used twice: {name}");
+            let packed = entity_iw4::pack_client_state_name(name);
+            assert_eq!(&packed[..name.len()], name.as_bytes());
+            assert!((0..=MAX_BOT_RANK).contains(&identity.rank));
+            assert!((0..=MAX_BOT_PRESTIGE).contains(&identity.prestige));
+            assert!(identity.prestige == 0 || identity.rank >= MIN_PRESTIGE_RANK);
         }
-        assert!(tagged > 0, "no name ever received a tag");
+        assert_eq!(bases, originals);
+    }
+
+    #[test]
+    fn tag_picker_prefers_irs_and_respects_gate_and_protocol_limit() {
+        let mut irs_draw = [0, 9].into_iter();
+        assert_eq!(with_tag("Yeet", &mut || irs_draw.next().unwrap()), "[IRS]Yeet");
+
+        let mut skipped_draw = [9].into_iter();
+        assert_eq!(with_tag("Yeet", &mut || skipped_draw.next().unwrap()), "Yeet");
+
+        let mut too_long_draw = [0].into_iter();
+        assert_eq!(
+            with_tag("NoScopeNoBitche", &mut || too_long_draw.next().unwrap()),
+            "NoScopeNoBitche"
+        );
+    }
+
+    #[test]
+    fn rank_and_prestige_draws_are_bounded_and_prestige_needs_high_rank() {
+        let mut maximum_draw = [79, 9, 9].into_iter();
+        assert_eq!(
+            draw_rank_prestige(&mut || maximum_draw.next().unwrap()),
+            (MAX_BOT_RANK, MAX_BOT_PRESTIGE)
+        );
+
+        let mut low_rank_draw = [49].into_iter();
+        assert_eq!(
+            draw_rank_prestige(&mut || low_rank_draw.next().unwrap()),
+            (49, 0)
+        );
     }
 
     #[test]
@@ -596,7 +684,7 @@ mod name_tests {
         let four = lobby_bot_names(4);
         assert_eq!(four[..], six[..4], "removing a bot must preserve existing names");
 
-        // The match takes exactly the names the lobby showed for this count.
+        // The match takes exactly the identities the lobby showed for this count.
         let shown = lobby_bot_names(MAX_HOST_BOTS);
         let mut roster = BotRoster::default();
         roster.add_bots(5, &[], true);
@@ -614,11 +702,12 @@ mod name_tests {
 
     #[test]
     fn a_full_lobby_has_unique_names_within_the_protocol_limit() {
-        let names = draw_names();
-        let shown: Vec<_> = names.iter().take(MAX_PARTICIPANTS as usize).collect();
-        let unique: std::collections::HashSet<_> = shown.iter().collect();
+        let identities = draw_identities();
+        let shown: Vec<_> = identities.iter().take(MAX_PARTICIPANTS as usize).collect();
+        let unique: std::collections::HashSet<_> = shown.iter().map(|identity| identity.name).collect();
         assert_eq!(unique.len(), shown.len());
-        for name in shown {
+        for identity in shown {
+            let name = identity.name;
             assert!(name.is_ascii() && name.len() <= BOT_NAME_BYTES, "{name}");
             let packed = entity_iw4::pack_client_state_name(name);
             assert_eq!(&packed[..name.len()], name.as_bytes());
