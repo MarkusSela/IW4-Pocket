@@ -2720,6 +2720,12 @@ mod memory_tests {
     use super::*;
 
     #[test]
+    fn rgba8_mip_chain_size_reserves_exact_kept_bytes() {
+        assert_eq!(rgba8_mip_chain_bytes(8, 4, 4, 0), 172);
+        assert_eq!(rgba8_mip_chain_bytes(8, 4, 4, 1), 44);
+    }
+
+    #[test]
     fn font_atlas_ignores_cap_and_emergency_cap() {
         assert_eq!(texture_cap_for(ImageRole::FontAtlas, 128, 8192), 8192);
         assert_eq!(texture_cap_for(ImageRole::FontAtlas, 64, 8192), 8192);
@@ -3792,6 +3798,17 @@ fn ios_fit_for_gpu(
 /// Expands every kept mip level to RGBA8, skipping the first `skip` levels.
 /// BC5 becomes (R, G, 0, 255) so a shader reading .rg sees the same two
 /// channels.
+#[cfg(any(target_os = "ios", test))]
+fn rgba8_mip_chain_bytes(width: u32, height: u32, levels: usize, skip: usize) -> usize {
+    (skip..levels)
+        .map(|level| {
+            let width = (width >> level).max(1) as usize;
+            let height = (height >> level).max(1) as usize;
+            width * height * 4
+        })
+        .sum()
+}
+
 #[cfg(target_os = "ios")]
 fn ios_expand_to_rgba8(
     mips: &DecodedMips,
@@ -3801,7 +3818,7 @@ fn ios_expand_to_rgba8(
     let total = mips.level_sizes.len();
     let width = (mips.width >> skip).max(1);
     let height = (mips.height >> skip).max(1);
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(rgba8_mip_chain_bytes(mips.width, mips.height, total, skip));
     let mut at = 0usize;
     for (level, size) in mips.level_sizes.iter().enumerate() {
         let size = *size as usize;

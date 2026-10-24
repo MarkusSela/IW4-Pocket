@@ -61,11 +61,12 @@ impl MapLoadProcess {
         self.admission = Some(self.progress.begin(StageId::Admission, None));
         // Local preparation is done: the decode buffers are dead but the allocator still
         // holds them. Give them back before the session installs the world (the peak).
+        let footprint_before = diag::ios_env::footprint_bytes().unwrap_or(0);
         let (took, released) = diag::release_freed_heap_report();
+        let footprint_after = diag::ios_env::footprint_bytes().unwrap_or(0);
         diag::info!(
             World,
-            "heap relief before admission: released {} MiB in {:.1}ms for `{}`",
-            released >> 20,
+            "heap relief before admission: released_bytes={released} footprint_before_bytes={footprint_before} footprint_after_bytes={footprint_after} in {:.1}ms for `{}`",
             took.as_secs_f32() * 1000.0,
             self.zone
         );
@@ -84,20 +85,20 @@ impl MapLoadProcess {
             self.progress.record_skipped(StageId::Admission);
         }
         let installed_ms = self.requested_at.elapsed().as_secs_f32() * 1000.0;
+        let footprint_before = diag::ios_env::footprint_bytes().unwrap_or(0);
         let (trim, released) = diag::release_freed_heap_report();
+        let footprint_after = diag::ios_env::footprint_bytes().unwrap_or(0);
         let trim_ms = trim.as_secs_f32() * 1000.0;
         let with_trim_ms = self.requested_at.elapsed().as_secs_f32() * 1000.0;
-        let rss = asset_transport::process_resident_bytes()
-            .map(|bytes| format!(" rss_mib={}", bytes >> 20))
-            .unwrap_or_default();
-        let heap = diag::process_live_heap_bytes()
-            .map(|bytes| format!(" heap_mib={}", bytes >> 20))
-            .unwrap_or_default();
+        let footprint = footprint_after >> 20;
+        let ios_allowed = diag::ios_env::available_bytes().unwrap_or(0) >> 20;
+        let (heap_live, heap_reserved) = diag::ios_env::heap_bytes().unwrap_or((0, 0));
         diag::info!(
             World,
-            "load complete: {installed_ms:.0}ms overlay-to-world-installed (+trim {with_trim_ms:.0}ms) for `{}`{rss}{heap} trim={trim_ms:.1}ms released_mib={}",
+            "load complete: {installed_ms:.0}ms overlay-to-world-installed (+trim {with_trim_ms:.0}ms) for `{}` footprint_mib={footprint} heap_live_mib={} heap_reserved_mib={} ios_allowed_mib={ios_allowed} trim={trim_ms:.1}ms released_bytes={released} footprint_before_bytes={footprint_before} footprint_after_bytes={footprint_after}",
             self.zone,
-            released >> 20
+            heap_live >> 20,
+            heap_reserved >> 20,
         );
     }
 

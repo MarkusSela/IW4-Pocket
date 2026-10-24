@@ -75,6 +75,7 @@ fn blit_scene(
     mut context: RenderContext,
 ) {
     let Some(scene) = scene_size_override() else {
+        state.copy = None;
         return;
     };
     let (target, _view) = view.into_inner();
