@@ -735,11 +735,13 @@ impl HostController {
         let next = if let Some(graph) = nav.filter(|graph| !graph.is_empty()) {
             let mut best = None;
             for attempt in 0..4u32 {
-                let candidate = nav::roam_node(
+                let Some(candidate) = nav::roam_node(
                     graph,
                     obs.self_state.origin,
                     salt.wrapping_add(attempt.wrapping_mul(0x9E37_79B1)),
-                )?;
+                ) else {
+                    break;
+                };
                 let penalty = reservation_penalty(obs.self_state.id, candidate, &self.reservations);
                 if penalty == 0.0 {
                     best = Some(candidate);

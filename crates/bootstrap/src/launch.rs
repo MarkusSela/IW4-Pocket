@@ -293,6 +293,7 @@ fn run_menu(
     for line in &menu_report {
         diag::info!(Launch, "{line}");
     }
+    log_menu_inventory(&menus);
     let missing = ["main", "main_text"]
         .into_iter()
         .filter(|name| menus.get(name).is_none())
@@ -711,5 +712,34 @@ fn launch_present_mode(acceptance: bool) -> PresentMode {
             PresentMode::default()
         }
         None => PresentMode::default(),
+    }
+}
+
+/// Lists every menu name once, and the entries with their actions for the game's own
+/// main menus, so a log is enough to see what the original menus offer and which of
+/// them could be brought out in the app (one line each, only at launch).
+fn log_menu_inventory(menus: &asset_game::MenuCatalog) {
+    let names: Vec<&str> = menus.menus.keys().map(String::as_str).collect();
+    diag::info!(Launch, "menu inventory: {} menus: {}", names.len(), names.join(" "));
+    for name in ["main", "main_text", "main_lockout", "main_mp", "main_multiplayer"] {
+        let Some(menu) = menus.menus.get(name) else {
+            continue;
+        };
+        let items: Vec<String> = menu
+            .items
+            .iter()
+            .filter(|item| !item.handlers.action.is_empty())
+            .map(|item| {
+                let action: String = format!("{:?}", item.handlers.action).chars().take(160).collect();
+                format!("{}|{}|{action}", item.name, item.text_key)
+            })
+            .collect();
+        diag::info!(
+            Launch,
+            "menu inventory: {name}: {} items, {} with an action: {}",
+            menu.items.len(),
+            items.len(),
+            items.join(" ;; ")
+        );
     }
 }

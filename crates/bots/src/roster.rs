@@ -170,11 +170,11 @@ const BOT_NAMES: &[&str] = &[
 // Keep the full pool above, but use the same explicit 15-byte display name in
 // the lobby and authoritative game state (including the two longer names).
 const BOT_NAME_BYTES: usize = 15;
-/// MW2 rank rows are indexed from 0 through 79.
-pub const MAX_BOT_RANK: i32 = 79;
+/// MW2 ranks are indexed from 0 (level 1) through 69 (level 70). From the original game;
+/// a rank row the loaded tables do not have simply shows no emblem.
+pub const MAX_BOT_RANK: i32 = 69;
 /// MW2 exposes ten prestige emblems in addition to no prestige.
 pub const MAX_BOT_PRESTIGE: i32 = 10;
-const MIN_PRESTIGE_RANK: i32 = 50;
 
 fn display_name(name: &'static str) -> &'static str {
     &name[..name.len().min(BOT_NAME_BYTES)]
@@ -305,7 +305,8 @@ impl BotIdentity {
 
 fn draw_rank_prestige(random: &mut impl FnMut() -> u64) -> (i32, i32) {
     let rank = (random() % (MAX_BOT_RANK as u64 + 1)) as i32;
-    let prestige = if rank < MIN_PRESTIGE_RANK || random() % 10 < 6 {
+    // Prestige resets the level to 1, so any rank can carry any prestige.
+    let prestige = if random() % 10 < 6 {
         0
     } else {
         (random() % MAX_BOT_PRESTIGE as u64 + 1) as i32
@@ -637,7 +638,6 @@ mod name_tests {
             assert_eq!(&packed[..name.len()], name.as_bytes());
             assert!((0..=MAX_BOT_RANK).contains(&identity.rank));
             assert!((0..=MAX_BOT_PRESTIGE).contains(&identity.prestige));
-            assert!(identity.prestige == 0 || identity.rank >= MIN_PRESTIGE_RANK);
         }
         assert_eq!(bases, originals);
     }
@@ -658,17 +658,24 @@ mod name_tests {
     }
 
     #[test]
-    fn rank_and_prestige_draws_are_bounded_and_prestige_needs_high_rank() {
-        let mut maximum_draw = [79, 9, 9].into_iter();
+    fn rank_and_prestige_draws_are_bounded() {
+        // rank draw, then the prestige gate (6 and above: prestiged), then the emblem.
+        let mut maximum_draw = [69, 9, 9].into_iter();
         assert_eq!(
             draw_rank_prestige(&mut || maximum_draw.next().unwrap()),
             (MAX_BOT_RANK, MAX_BOT_PRESTIGE)
         );
 
-        let mut low_rank_draw = [49].into_iter();
+        let mut plain_draw = [0, 5].into_iter();
         assert_eq!(
-            draw_rank_prestige(&mut || low_rank_draw.next().unwrap()),
-            (49, 0)
+            draw_rank_prestige(&mut || plain_draw.next().unwrap()),
+            (0, 0)
+        );
+
+        let mut wrapped_draw = [70, 5].into_iter();
+        assert_eq!(
+            draw_rank_prestige(&mut || wrapped_draw.next().unwrap()),
+            (0, 0)
         );
     }
 
