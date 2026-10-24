@@ -11,10 +11,13 @@ use crate::nav::{self, NAV_HULL, NAV_SCHEMA, NavGraph, RouteStats};
 use crate::query::{Budgeted, QueryCounters, QuerySubsystem, TraceBudget};
 use crate::roster::{
     BotAddQueue, BotFireQueue, BotHold, BotRoster, BotTpQueue, BotTpTarget, BotTpWhere,
-    MAX_HOST_BOTS, MAX_PARTICIPANTS, default_class_index,
+    MAX_HOST_BOTS, MAX_PARTICIPANTS, default_class_index, reset_lobby_names,
 };
 use crate::sensor;
-use frame::{AuthoritySet, BotNavigationReady, ClientSet, HasWorld, MatchTornDown, RuntimeRole};
+use frame::{
+    AuthoritySet, BotNavigationReady, ClientSet, HasWorld, MatchTornDown, RuntimeRole,
+    TeardownReason,
+};
 
 const VIEW_PITCH_DOWN: f32 = 85.0;
 const TRACE_QUOTA: u32 = 96;
@@ -146,8 +149,17 @@ fn reset_roster_on_match_torn_down(
     mut ready: ResMut<BotNavigationReady>,
     mut fill: ResMut<BotAutoFill>,
 ) {
-    if torn.read().len() == 0 {
+    let mut reset_lobby = false;
+    let mut torn_down = false;
+    for fact in torn.read() {
+        torn_down = true;
+        reset_lobby |= fact.reason == TeardownReason::MatchEnded;
+    }
+    if !torn_down {
         return;
+    }
+    if reset_lobby {
+        reset_lobby_names();
     }
     *roster = BotRoster::default();
     *nav = BotNav::default();
@@ -318,6 +330,9 @@ fn boot_bots(
             );
             continue;
         }
+        world
+            .0
+            .set_client_rank_prestige(bot.id, bot.rank, bot.prestige);
         let index = default_class_index(seed, bot.id, bot.class_picks);
         let join_id = request_ids.allocate();
         let class_request = request_ids.allocate();
