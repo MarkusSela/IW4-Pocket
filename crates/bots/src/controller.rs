@@ -35,6 +35,8 @@ const FIGHT_SCAN_MAX_AGE_TICKS: u32 = 8;
 const FIGHT_COMMIT_MAX_AGE_TICKS: u32 = 60;
 /// Commanded movement without displacement for this long is a stuck bot.
 const STUCK_TICKS: u32 = 40;
+const GOAL_RESERVATION_RADIUS: f32 = 96.0;
+const GOAL_RESERVATION_PENALTY: f32 = 24.0;
 
 #[derive(Clone, Debug)]
 pub struct HostController {
@@ -67,6 +69,8 @@ pub struct HostController {
     progress_origin: Option<[f32; 3]>,
     progress_tick: u32,
     escape: Option<([f32; 3], u32)>,
+    reservations: Vec<(ClientId, [f32; 3])>,
+    last_origin: [f32; 3],
 }
 
 impl HostController {
@@ -101,6 +105,8 @@ impl HostController {
             progress_origin: None,
             progress_tick: 0,
             escape: None,
+            reservations: Vec::new(),
+            last_origin: [0.0; 3],
         }
     }
 
@@ -158,13 +164,17 @@ impl HostController {
         self.last_cmd
     }
 
+    pub fn position(&self) -> [f32; 3] {
+        self.last_origin
+    }
+
     pub fn drive(
         &mut self,
         obs: &BotObservation,
         world: &mut impl WorldQuery,
         dt_ms: i32,
     ) -> UserCmd {
-        self.drive_nav(obs, world, None, &mut 512, dt_ms)
+        self.drive_nav(obs, world, None, &mut 512, &[], dt_ms)
     }
 
     pub fn drive_nav(
@@ -173,8 +183,12 @@ impl HostController {
         world: &mut impl WorldQuery,
         nav: Option<&NavGraph>,
         astar_budget: &mut u32,
+        reservations: &[(ClientId, [f32; 3])],
         dt_ms: i32,
     ) -> UserCmd {
+        self.last_origin = obs.self_state.origin;
+        self.reservations.clear();
+        self.reservations.extend_from_slice(reservations);
         world.enter(QuerySubsystem::Execution);
         let key = nav.map(|g| (g.generation, g.digest, g.schema, g.hull));
         if self.nav_key != key {
@@ -358,6 +372,7 @@ impl HostController {
                 &mut self.committed,
                 &mut self.route_goal,
                 &mut self.route_work,
+                &self.reservations,
             );
             next = self.pick_task(obs, objective);
         }
@@ -516,6 +531,11 @@ impl HostController {
             self.escape = None;
             self.committed.clear();
             self.roam = None;
+            if obs.tick >= until && dist_xy(here, goal) > 8.0 {
+                self.route_work.cancel();
+                self.route_goal = None;
+                self.roam_gen = self.roam_gen.saturating_add(1);
+            }
         }
         let moving = matches!(
             self.intent.move_mode,
@@ -713,7 +733,25 @@ impl HostController {
         self.roam_gen = self.roam_gen.saturating_add(1);
         let salt = obs.self_state.id.0 ^ self.roam_gen;
         let next = if let Some(graph) = nav.filter(|graph| !graph.is_empty()) {
-            nav::roam_node(graph, obs.self_state.origin, salt)
+            let mut best = None;
+            for attempt in 0..4u32 {
+                let candidate = nav::roam_node(
+                    graph,
+                    obs.self_state.origin,
+                    salt.wrapping_add(attempt.wrapping_mul(0x9E37_79B1)),
+                )?;
+                let penalty = reservation_penalty(obs.self_state.id, candidate, &self.reservations);
+                if penalty == 0.0 {
+                    best = Some(candidate);
+                    break;
+                }
+                if best.is_none_or(|current| {
+                    reservation_penalty(obs.self_state.id, current, &self.reservations) > penalty
+                }) {
+                    best = Some(candidate);
+                }
+            }
+            best
         } else {
             let ang = (salt as f32) * 0.37;
             Some([
@@ -814,6 +852,7 @@ impl HostController {
                 &mut self.committed,
                 &mut self.route_goal,
                 &mut self.route_work,
+                &self.reservations,
             ) {
                 self.task = Task {
                     kind: TaskKind::TouchObj,
@@ -1056,22 +1095,33 @@ impl HostController {
         hold: f32,
     ) -> Vec<[f32; 3]> {
         let here = obs.self_state.origin;
-        if let Some(graph) = nav.filter(|graph| !graph.is_empty()) {
+        let mut candidates = if let Some(graph) = nav.filter(|graph| !graph.is_empty()) {
             let supports = nav::firing_supports(graph, here, target, hold, FIGHT_CANDIDATES);
             if !supports.is_empty() {
-                return supports;
+                supports
+            } else {
+                Vec::new()
             }
+        } else {
+            Vec::new()
+        };
+        if candidates.is_empty() {
+            candidates = (0..FIGHT_RING)
+                .map(|step| {
+                    let ang = (step as f32) * (core::f32::consts::TAU / FIGHT_RING as f32);
+                    [
+                        target[0] + hold * ang.cos(),
+                        target[1] + hold * ang.sin(),
+                        here[2],
+                    ]
+                })
+                .collect();
         }
-        (0..FIGHT_RING)
-            .map(|step| {
-                let ang = (step as f32) * (core::f32::consts::TAU / FIGHT_RING as f32);
-                [
-                    target[0] + hold * ang.cos(),
-                    target[1] + hold * ang.sin(),
-                    here[2],
-                ]
-            })
-            .collect()
+        candidates.sort_by(|a, b| {
+            reservation_penalty(obs.self_state.id, *a, &self.reservations)
+                .total_cmp(&reservation_penalty(obs.self_state.id, *b, &self.reservations))
+        });
+        candidates
     }
 
     fn seek(
@@ -1106,22 +1156,18 @@ impl HostController {
                 if obj.action == ObjectiveAction::Defend
                     || (obj.role == TeamRole::Cover && obj.active_user.is_some())
                 {
-                    // Scan separate sectors while guarding a site or an active teammate.
-                    let angle = ((obs.self_state.id.0 + obs.tick / 80) % 8) as f32
-                        * std::f32::consts::TAU
-                        / 8.0;
-                    let guard = [
-                        obj.origin[0] + angle.cos() * 144.0,
-                        obj.origin[1] + angle.sin() * 144.0,
-                        obj.origin[2],
-                    ];
+                    let guard = guard_slot(obj.origin, obs.self_state.id);
                     if dist_xy(obs.self_state.origin, obj.origin) <= 220.0
                         && (obs.self_state.origin[2] - obj.origin[2]).abs()
                             <= nav::STEP_Z_IN * 2.0 + 8.0
                     {
+                        let (move_mode, path, move_goal) =
+                            self.route(obs.self_state.origin, guard, world, nav, astar_budget);
                         return BotIntent {
                             look_at: Some([guard[0], guard[1], guard[2] + 60.0]),
-                            path: PathOutcome::Clear,
+                            move_goal: (move_mode != MoveMode::Hold).then_some(move_goal).flatten(),
+                            move_mode,
+                            path,
                             ..BotIntent::default()
                         };
                     }
@@ -1412,6 +1458,7 @@ fn choose_objective(
     committed: &mut Vec<nav::RouteStep>,
     route_goal: &mut Option<[f32; 3]>,
     route_work: &mut nav::RouteWork,
+    reservations: &[(ClientId, [f32; 3])],
 ) -> Option<ModeObjective> {
     let mut candidates = obs.objectives.clone();
     if candidates.is_empty()
@@ -1422,6 +1469,7 @@ fn choose_objective(
     candidates.sort_by(|a, b| {
         let score = |o: &ModeObjective| {
             objective_utility(obs, *o, None)
+                - reservation_penalty(obs.self_state.id, o.origin, reservations)
                 + if *route_goal == Some(o.origin) {
                     6.0
                 } else {
@@ -1536,6 +1584,50 @@ fn path_ends_in_use_volume(
         .is_some_and(|end| world.objective_contains(obj, end.position))
 }
 
+fn reservation_penalty(
+    client: ClientId,
+    candidate: [f32; 3],
+    reservations: &[(ClientId, [f32; 3])],
+) -> f32 {
+    reservations
+        .iter()
+        .filter(|(owner, goal)| {
+            *owner != client && dist_xy(candidate, *goal) < GOAL_RESERVATION_RADIUS
+        })
+        .count() as f32
+        * GOAL_RESERVATION_PENALTY
+}
+
+fn guard_slot(origin: [f32; 3], client: ClientId) -> [f32; 3] {
+    let angle = (client.0 % 8) as f32 * core::f32::consts::TAU / 8.0;
+    [
+        origin[0] + angle.cos() * 144.0,
+        origin[1] + angle.sin() * 144.0,
+        origin[2],
+    ]
+}
+
+fn side_step_targets(from: [f32; 3], to: [f32; 3]) -> [[f32; 3]; 3] {
+    let dx = to[0] - from[0];
+    let dy = to[1] - from[1];
+    let length = (dx * dx + dy * dy).sqrt().max(1.0);
+    let forward = [dx / length, dy / length];
+    let diagonal = core::f32::consts::FRAC_1_SQRT_2;
+    [
+        [
+            from[0] + STEP_IN * (forward[0] - forward[1]) * diagonal,
+            from[1] + STEP_IN * (forward[1] + forward[0]) * diagonal,
+            from[2],
+        ],
+        [
+            from[0] + STEP_IN * (forward[0] + forward[1]) * diagonal,
+            from[1] + STEP_IN * (forward[1] - forward[0]) * diagonal,
+            from[2],
+        ],
+        [from[0] - STEP_IN * forward[0], from[1] - STEP_IN * forward[1], from[2]],
+    ]
+}
+
 fn walk_step(
     from: [f32; 3],
     to: [f32; 3],
@@ -1551,10 +1643,25 @@ fn walk_step(
     match world.walk_hull(from, step) {
         Ok(WalkSample::Clear) => (MoveMode::Walk, PathOutcome::Clear, Some(to)),
         Ok(WalkSample::BreakGlass) => (MoveMode::BreakGlass, PathOutcome::Clear, Some(step)),
-        Ok(WalkSample::Blocked) if len > STEP_IN => {
-            (MoveMode::Hold, PathOutcome::Unreachable, Some(to))
+        Ok(WalkSample::Blocked) => {
+            for detour in side_step_targets(from, to) {
+                match world.walk_hull(from, detour) {
+                    Ok(WalkSample::Clear) => {
+                        return (MoveMode::Walk, PathOutcome::Clear, Some(detour));
+                    }
+                    Ok(WalkSample::BreakGlass) => {
+                        return (MoveMode::BreakGlass, PathOutcome::Clear, Some(detour));
+                    }
+                    Ok(WalkSample::Blocked) | Err(_) => {}
+                }
+            }
+            let path = if len > STEP_IN {
+                PathOutcome::Unreachable
+            } else {
+                PathOutcome::Blocked
+            };
+            (MoveMode::Hold, path, Some(to))
         }
-        Ok(WalkSample::Blocked) => (MoveMode::Hold, PathOutcome::Blocked, Some(to)),
         Err(_) => (MoveMode::Hold, PathOutcome::BudgetExhausted, Some(to)),
     }
 }
