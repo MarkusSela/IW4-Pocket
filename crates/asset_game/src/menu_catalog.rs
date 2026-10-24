@@ -1,6 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+
+static FONT_ATLAS_CUMULATIVE: AtomicUsize = AtomicUsize::new(0);
+static FONT_ATLAS_ZERO_REPORTED: AtomicBool = AtomicBool::new(false);
 
 use bevy::prelude::Resource;
 use fastfile_iw4::{
@@ -963,10 +967,13 @@ impl MenuSink {
                 max_h = u32::from(image.height);
             }
         }
-        diag::info!(
-            World,
-            "font atlas exempt from texture cap: {atlases} atlases, largest {max_w}x{max_h}"
-        );
+        let cumulative_atlases = FONT_ATLAS_CUMULATIVE.fetch_add(atlases, Ordering::Relaxed) + atlases;
+        if cumulative_atlases > 0 || !FONT_ATLAS_ZERO_REPORTED.swap(true, Ordering::Relaxed) {
+            diag::info!(
+                World,
+                "font atlas exempt from texture cap: cumulative {cumulative_atlases} atlases (this catalog {atlases}), largest {max_w}x{max_h}"
+            );
+        }
         for name in ["main", "main_text", "menu_xboxlive_lobby"]
             .into_iter()
             .chain(HUD_CHROME_MENUS.iter().copied())
