@@ -464,7 +464,13 @@ fn shoot(world: &mut World, object: u64) {
             .and_then(|o| runtime.player_client(o))
             .map(ClientId)
     };
-    fire_bullet(world, object, from, turret.aim, turret.weapon, attacker);
+    let _ = fire_bullet(world, object, from, turret.aim, turret.weapon, attacker);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BulletFireOutcome {
+    pub hit: bool,
+    pub damage: Option<i32>,
 }
 
 pub(crate) fn fire_bullet(
@@ -474,7 +480,7 @@ pub(crate) fn fire_bullet(
     dir: [f32; 3],
     weapon: u32,
     attacker: Option<ClientId>,
-) {
+) -> BulletFireOutcome {
     let range = weapon_range(world, weapon);
     let end = (Vec3::from_array(from) + Vec3::from_array(dir) * range).to_array();
     let ignore = ignore_self(world, object);
@@ -485,17 +491,28 @@ pub(crate) fn fire_bullet(
         ..
     } = entity_trace(world, from, end, MASK_SHOT, ignore)
     else {
-        return;
+        return BulletFireOutcome {
+            hit: false,
+            damage: None,
+        };
     };
     let Some(facts) = FrameWorld::from_world(world).combat_facts_for(weapon) else {
-        return;
+        return BulletFireOutcome {
+            hit: true,
+            damage: None,
+        };
     };
     let amount = facts.damage;
     let hit = match collider {
         ColliderId::Player { .. } | ColliderId::World { .. } => None,
         _ => match collider_entity(world, collider) {
             Value::Object(hit) => Some(hit),
-            _ => return,
+            _ => {
+                return BulletFireOutcome {
+                    hit: true,
+                    damage: None,
+                };
+            }
         },
     };
     let runtime = world.resource::<Runtime>();
@@ -553,13 +570,28 @@ pub(crate) fn fire_bullet(
     let runtime = world.resource::<Runtime>();
     let target = match collider {
         ColliderId::Player { client, .. } => crate::script::HitTarget::Player(client),
-        ColliderId::World { .. } => return,
+        ColliderId::World { .. } => {
+            return BulletFireOutcome {
+                hit: true,
+                damage: None,
+            };
+        }
         _ => match hit.and_then(|hit| runtime.entities.get(&hit)) {
             Some(e) if e.can_damage => match e.presence {
                 Some(presence) => crate::script::HitTarget::Entity(presence),
-                None => return,
+                None => {
+                    return BulletFireOutcome {
+                        hit: true,
+                        damage: None,
+                    };
+                }
             },
-            _ => return,
+            _ => {
+                return BulletFireOutcome {
+                    hit: true,
+                    damage: None,
+                };
+            }
         },
     };
     let inflictor = runtime.entities.get(&object).and_then(|e| e.presence);
@@ -578,4 +610,8 @@ pub(crate) fn fire_bullet(
             flags: 0,
             hitloc: 0,
         });
+    BulletFireOutcome {
+        hit: true,
+        damage: Some(amount),
+    }
 }
