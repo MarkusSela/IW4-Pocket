@@ -499,6 +499,7 @@ fn think_bots(mut p: ThinkBots) {
     let count = p.roster.bots.len();
     let start = (p.clock.tick as usize / 2) % count.max(1);
     let mut controller_us = 0u64;
+    let reservations = bot_goal_reservations(&p.roster);
     let seed = p.roster.seed;
     for offset in 0..count {
         let bot = &mut p.roster.bots[(start + offset) % count];
@@ -553,6 +554,7 @@ fn think_bots(mut p: ThinkBots) {
                 &mut queried,
                 Some(&p.nav.graph),
                 &mut astar,
+                &reservations,
                 AUTHORITY_MS,
             );
             controller_us += started.elapsed().as_micros() as u64;
@@ -607,6 +609,48 @@ fn think_bots(mut p: ThinkBots) {
     meter.max_starved = meter.max_starved.max(starved);
     if meter.ticks >= METER_PERIOD_TICKS {
         meter.report(routes, count);
+        log_bot_snapshots(&p.roster, tick);
+    }
+}
+
+/// Where each thinking bot is heading, so that a bot never picks the spot another bot
+/// already walks to (the controller adds a penalty for goals within a short radius).
+fn bot_goal_reservations(roster: &BotRoster) -> Vec<(sim::ClientId, [f32; 3])> {
+    roster
+        .bots
+        .iter()
+        .filter_map(|bot| {
+            let goal = bot.brain.as_ref()?.intent().move_goal?;
+            Some((bot.id, goal))
+        })
+        .collect()
+}
+
+/// One line per bot every metering window (10 s), visible at the Normal log level
+/// (the prefix is not `bots: id=`, which Normal drops as high-frequency detail).
+fn log_bot_snapshots(roster: &BotRoster, tick: u32) {
+    for bot in &roster.bots {
+        let Some(brain) = bot.brain.as_ref() else {
+            continue;
+        };
+        let task = brain.task();
+        let intent = brain.intent();
+        let (route_age, route_starved) = brain.route_age();
+        let pos = brain.position();
+        diag::info!(
+            Sim,
+            "bots: snapshot id={} pos=({:.0},{:.0},{:.0}) task={:?} reason={:?} goal={:?} path={:?} route_age={route_age} starve={route_starved} stuck={} report={:?}",
+            bot.id.0,
+            pos[0],
+            pos[1],
+            pos[2],
+            task.kind,
+            task.reason,
+            intent.move_goal.map(|g| [g[0].round(), g[1].round(), g[2].round()]),
+            intent.path,
+            brain.stuck(tick),
+            brain.report(),
+        );
     }
 }
 
