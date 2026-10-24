@@ -5,9 +5,12 @@
 ## Bots
 - Names, clan tags and levels are drawn again by themselves at the end of every match. There is no button. Adding or removing a bot in a stopped lobby still keeps the names of the bots that stay.
 - Clan tags appear more often: 9 in 10 of the names that have room for one get a tag (before: 7 in 10), which is about half of all names (before: about 4 in 10; long names have no room within the 15 characters). `[IRS]` is eight times as likely as any other tag.
-- Every bot gets a random rank (0 to 79) and a prestige (only from rank 50, mostly none), meant to show on the scoreboard like a player (set before the bot joins; if the game scripts reset it right after, it will not show: not verified). The lobby list still shows names only.
+- Every bot gets a random level (1 to 70, as in the original game) and sometimes a prestige. The private lobby list shows it after the name (`Name  Lv42`, `Name  P3 Lv70`), and the match uses the same name and level. The host's choice is kept even if the game's own scripts try to set the rank when the bot joins. Whether the scoreboard shows it is not verified on a device.
 - Bots no longer all pick the same goal: a bot avoids a roam spot, objective or firing position that another bot already walks to. Guards near an objective walk to their own slot instead of only turning their head. Without navigation data a blocked bot tries to step around the obstacle before it stops.
 - One line per bot every 10 s (`bots: snapshot id=… pos=… task=… goal=… path=…`) in the log, so a "bots hide" report can be read from `iw4l-boot.log`.
+
+## Menus of the original game
+- At launch the log lists the name of every menu in the game files (`menu inventory: …`) and the entries of the original main menu with their actions. Nothing is shown differently yet: this is what is needed to bring the original multiplayer menus out in the next build. Please send `iw4l-boot.log` from this build.
 
 ## Name and class names
 - While a menu text field is active the iOS keyboard is shown, so the player name (Options > Multiplayer) and the class names (Create a class > Rename) can be typed. Tapping elsewhere closes the field. Not tried on a device.
@@ -28,7 +31,7 @@
 - If you test the Chopper, send `iw4l-boot.log` with lines starting with `heli_`.
 
 ## Known, not done in this build
-- The original main menu with Campaign and Spec Ops (the runtime only plays multiplayer).
+- Campaign and Spec Ops: the runtime only has multiplayer modes and map lists (`mp_` zones only); they are not offered, not shown as broken buttons.
 - Home-screen widgets (they need an extension that SideStore with a free Apple ID may not sign).
 - Level 70 at the start of a profile: it comes from the game's own files; this build only adds what is needed to find it.
 - Weapon accuracy: no bug was found in the code, so nothing was changed.
