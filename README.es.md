@@ -51,7 +51,7 @@ No hace falta saber programar. Lleva unos 15 minutos más la copia de archivos.
 
 Añade la fuente con el botón de arriba y actualízala en SideStore. Es **una sola app**, no dos instalaciones estable/test. La fuente lista **todas las versiones**, estables y TEST, de la más reciente a la más antigua; elige la que quieras en SideStore. Las TEST llevan **TEST** en la descripción. No hace falta ningún ajuste beta. La entrada más reciente puede ser una TEST: es experimental y no se ha confirmado que el fallo de memoria esté resuelto.
 
-La interfaz muestra la versión y el build de la app, por ejemplo `0.3.9 (23)`. **No desinstales**: actualiza sobre la app existente para conservar los archivos del juego. Estos pasos no se han verificado en un teléfono.
+La interfaz muestra la versión y el build de la app, por ejemplo `0.4.0 (24)`. **No desinstales**: actualiza sobre la app existente para conservar los archivos del juego. Estos pasos no se han verificado en un teléfono.
 
 ## 📱 ¿Funcionará en mi dispositivo?
 

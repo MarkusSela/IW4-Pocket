@@ -51,7 +51,7 @@ Aucune programmation nécessaire. Comptez environ 15 minutes plus la copie des f
 
 Ajoutez la source avec le bouton ci-dessus, puis actualisez-la dans SideStore. C'est **une seule app**, pas deux installations stable/test. La source liste **toutes les versions**, stables et TEST, de la plus récente à la plus ancienne ; choisissez celle que vous voulez dans SideStore. Les TEST sont signalées par **TEST** dans leur description. Aucun réglage bêta n'est nécessaire. L'entrée la plus récente peut être une TEST : elle est expérimentale et la correction du plantage mémoire n'est pas confirmée.
 
-L'interface affiche la version et le build de l'app, par exemple `0.3.9 (23)`. **Ne désinstallez pas** : installez par-dessus l'app existante pour conserver les fichiers du jeu. Ces étapes n'ont pas été vérifiées sur un téléphone.
+L'interface affiche la version et le build de l'app, par exemple `0.4.0 (24)`. **Ne désinstallez pas** : installez par-dessus l'app existante pour conserver les fichiers du jeu. Ces étapes n'ont pas été vérifiées sur un téléphone.
 
 ## 📱 Est-ce que ça marchera sur mon appareil ?
 

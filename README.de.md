@@ -51,7 +51,7 @@ Keine Programmierkenntnisse nötig. Etwa 15 Minuten plus das Kopieren der Dateie
 
 Füge die Quelle über den Button oben hinzu und aktualisiere sie in SideStore. Es ist **eine einzige App**, keine getrennten Stable-/Test-Installationen. Die Quelle listet **alle Veröffentlichungen**, Stable und TEST, die neueste zuerst; wähle in SideStore die gewünschte. TEST-Versionen sind in der Beschreibung mit **TEST** gekennzeichnet. Eine Beta-Einstellung ist nicht nötig. Der neueste Eintrag kann eine TEST sein: sie ist experimentell, und die Behebung des Speicherabsturzes ist nicht bestätigt.
 
-Die Oberfläche zeigt Version und Build der App, zum Beispiel `0.3.9 (23)`. **Nicht deinstallieren**: über die vorhandene App installieren, damit die Spieldateien erhalten bleiben. Diese Schritte wurden nicht auf einem Telefon geprüft.
+Die Oberfläche zeigt Version und Build der App, zum Beispiel `0.4.0 (24)`. **Nicht deinstallieren**: über die vorhandene App installieren, damit die Spieldateien erhalten bleiben. Diese Schritte wurden nicht auf einem Telefon geprüft.
 
 ## 📱 Läuft es auf meinem Gerät?
 

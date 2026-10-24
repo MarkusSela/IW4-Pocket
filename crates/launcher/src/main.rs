@@ -145,8 +145,8 @@ fn install_signal_logging() {
     }
 }
 
-/// Release name shown small in the main menu (the Cargo version is `0.3.9`).
-const APP_LABEL: &str = "0.3.9";
+/// Release name shown small in the main menu (the Cargo version is `0.4.0`).
+const APP_LABEL: &str = "0.4.0";
 
 fn main() {
     #[cfg(target_os = "ios")]
