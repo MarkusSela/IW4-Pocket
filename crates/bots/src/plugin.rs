@@ -287,15 +287,30 @@ fn drain_bot_add_queue(
 // The link hands the local player its real id during signon, which can land
 // after a bot was already minted. A slot holding that id would make `is_bot`
 // claim the player, so retire it — loudly, because by then it is a bug.
-fn evict_bots_claiming_local_client(mut roster: ResMut<BotRoster>, local: Res<LocalPresentClient>) {
-    if !roster.is_bot(local.0) {
+fn evict_bots_claiming_local_client(
+    mut roster: ResMut<BotRoster>,
+    local: Res<LocalPresentClient>,
+    mut actions: ResMut<ClientActionInbox>,
+    mut request_ids: ResMut<net::ActionRequestIds>,
+    world: Option<ResMut<AuthorityWorld>>,
+) {
+    let Some(index) = roster.bots.iter().position(|bot| bot.id == local.0) else {
         return;
+    };
+    let bot = roster.bots.remove(index);
+    if bot.joined {
+        let request_id = request_ids.allocate();
+        if let Err(error) = actions.push(bot.id, ClientAction::LeaveMatch { request_id }) {
+            diag::warn!(Sim, "bots: client {} leave was not queued: {error}", bot.id.0);
+        }
     }
-    roster.bots.retain(|bot| bot.id != local.0);
+    if let Some(mut world) = world {
+        world.0.persistent_data_mut().unbind(bot.id);
+    }
     diag::warn!(
         Sim,
         "bots: retired the slot on client {} — that id is the local player",
-        local.0.0
+        bot.id.0
     );
 }
 

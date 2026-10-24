@@ -53,6 +53,11 @@ class Contract(unittest.TestCase):
         self.assertLess(verify, wf.index("gh release create"))
         self.assertIn("--profile ios", wf)
         self.assertIn("$GITHUB_SHA", wf)
+        self.assertNotIn('IW4L_BUILD_NUMBER: "1"', wf)
+        self.assertIn("/usr/libexec/PlistBuddy", wf)
+        self.assertIn("Print :CFBundleVersion", wf)
+        self.assertIn("ios/Info.plist", wf)
+        self.assertIn("CFBundleVersion must be a non-empty numeric build number", wf)
         # The SideStore source logic is protected by its own tests, run before the build.
         self.assertIn("python3 tools/test_gen_source.py", wf)
         self.assertLess(wf.index("python3 tools/test_gen_source.py"), wf.index("cargo build"))

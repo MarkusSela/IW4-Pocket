@@ -351,15 +351,19 @@ impl UdpAuthorityHub {
         self.bootstrap = Some(lane);
     }
 
-    fn enroll_relay_member(&mut self, member_id: MemberId, occupied: &[u32]) -> ConnectionId {
+    fn enroll_relay_member(&mut self, member_id: MemberId, occupied: &[u32]) -> Option<ConnectionId> {
         if let Some((conn, _)) = self.member_by_conn.iter().find(|(_, id)| **id == member_id) {
-            return *conn;
+            return Some(*conn);
         }
-        let (conn, _) = self.connections.accept_new(occupied);
+        let Some((conn, _)) = self.connections.accept_new(occupied) else {
+            diag::warn!(Net, "session full; refusing relay member {member_id}");
+            self.denied.insert(member_id);
+            return None;
+        };
         self.peers.insert(conn, member_id);
         self.replication.insert(conn, PeerReplicationState::new());
         self.member_by_conn.insert(conn, member_id);
-        conn
+        Some(conn)
     }
 
     pub fn reconcile_relay_membership(
@@ -372,7 +376,7 @@ impl UdpAuthorityHub {
             if *member_id == local || self.denied.contains(member_id) {
                 continue;
             }
-            self.enroll_relay_member(*member_id, occupied);
+            let _ = self.enroll_relay_member(*member_id, occupied);
         }
     }
 

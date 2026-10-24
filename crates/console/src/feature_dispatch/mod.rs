@@ -70,13 +70,15 @@ pub(crate) fn route_debug_feature_commands(
                 {
                     echo("bot: cheats are off".into(), console, line);
                 }
-                Ok(BotVerb::Add(n)) => {
-                    bot_add.push(n);
-                    echo(format!("bot: queued add {n}"), console, line);
+                Ok(BotVerb::Add { count, clamped }) => {
+                    bot_add.push(count);
+                    let suffix = clamped.then(|| format!(" (clamped to 1..{})", bots::MAX_HOST_BOTS)).unwrap_or_default();
+                    echo(format!("bot: queued add {count}{suffix}"), console, line);
                 }
-                Ok(BotVerb::Dummy(n)) => {
-                    bot_add.push_dummy(n);
-                    echo(format!("bot: queued dummy {n}"), console, line);
+                Ok(BotVerb::Dummy { count, clamped }) => {
+                    bot_add.push_dummy(count);
+                    let suffix = clamped.then(|| format!(" (clamped to 1..{})", bots::MAX_HOST_BOTS)).unwrap_or_default();
+                    echo(format!("bot: queued dummy {count}{suffix}"), console, line);
                 }
                 Ok(BotVerb::Hold(on)) => {
                     bot_hold.0 = on;
@@ -308,8 +310,8 @@ pub(crate) const BOT_USAGE: &str = "usage: bot add [N] | dummy [N] | hold [on|of
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum BotVerb {
-    Add(u32),
-    Dummy(u32),
+    Add { count: u32, clamped: bool },
+    Dummy { count: u32, clamped: bool },
     Hold(bool),
     Give {
         id: ClientId,
@@ -323,28 +325,23 @@ pub(crate) enum BotVerb {
 pub(crate) fn parse_bot_args(args: &[String]) -> Result<BotVerb, String> {
     let sub = args.first().map(String::as_str).unwrap_or("");
     match sub {
-        "add" => {
-            let n = args
-                .get(1)
-                .and_then(|s| s.parse::<u32>().ok())
-                .unwrap_or(1)
-                .clamp(1, bots::MAX_HOST_BOTS);
-            Ok(BotVerb::Add(n))
-        }
-        "dummy" => {
+        "add" | "dummy" => {
             if args.len() > 2 {
-                return Err("usage: bot dummy [N]".into());
+                return Err(format!("usage: bot {sub} [N]"));
             }
-            let n = args
+            let requested = args
                 .get(1)
                 .map(|s| s.parse::<u32>())
                 .transpose()
-                .map_err(|_| "usage: bot dummy [N]".to_owned())?
+                .map_err(|_| format!("usage: bot {sub} [N]"))?
                 .unwrap_or(1);
-            if !(1..=bots::MAX_HOST_BOTS).contains(&n) {
-                return Err(format!("bot dummy: count must be 1..{}", bots::MAX_HOST_BOTS));
+            let count = requested.clamp(1, bots::MAX_HOST_BOTS);
+            let clamped = count != requested;
+            if sub == "add" {
+                Ok(BotVerb::Add { count, clamped })
+            } else {
+                Ok(BotVerb::Dummy { count, clamped })
             }
-            Ok(BotVerb::Dummy(n))
         }
         "hold" => match args.get(1).map(String::as_str) {
             None | Some("on") | Some("1") => Ok(BotVerb::Hold(true)),

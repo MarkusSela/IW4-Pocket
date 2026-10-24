@@ -35,10 +35,14 @@ jobs:
             ios-ipa-
       - name: Build iw4l for iOS
         env:
-          IW4L_BUILD_NUMBER: "1"
           IPHONEOS_DEPLOYMENT_TARGET: "15.0"
         run: |
-          set -o pipefail
+          set -e -o pipefail
+          IW4L_BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' ios/Info.plist)"
+          case "$IW4L_BUILD_NUMBER" in
+            ''|*[!0-9]*) echo "CFBundleVersion must be a non-empty numeric build number" >&2; exit 1 ;;
+          esac
+          export IW4L_BUILD_NUMBER
           cargo build --profile ios --target aarch64-apple-ios -p launcher --bin iw4l 2>&1 | tee build.log
       - name: Package unsigned IPA
         run: |
