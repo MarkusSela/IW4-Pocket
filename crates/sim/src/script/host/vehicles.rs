@@ -184,14 +184,45 @@ fn aim_point(world: &mut World, aim: TurretAim) -> Option<[f32; 3]> {
     }
 }
 
-fn gunner_input(world: &mut World, client: u32) -> Option<([f32; 3], bool)> {
-    let mut frame = crate::frame::FrameWorld::from_world(world);
-    let angles = frame.player(crate::ClientId(client))?.viewangles;
-    let held = crate::script_player::buttons(&mut frame, crate::ClientId(client));
-    Some((
-        math_iw4::angle_vectors(angles).0,
-        held & playerstate_iw4::buttons::ATTACK != 0,
-    ))
+fn gunner_input(world: &mut World, heli: u64, client: u32) -> Option<([f32; 3], bool)> {
+    let id = crate::ClientId(client);
+    let (eye, angles, held) = {
+        let mut frame = crate::frame::FrameWorld::from_world(world);
+        let ps = *frame.player(id)?;
+        let eye = frame
+            .client_meta(id)
+            .and_then(|meta| meta.linked_weapon_view)
+            .map_or(
+                [
+                    ps.origin[0],
+                    ps.origin[1],
+                    ps.origin[2] + ps.view_height_current,
+                ],
+                |view| view.origin,
+            );
+        (
+            eye,
+            ps.viewangles,
+            crate::script_player::buttons(&mut frame, id),
+        )
+    };
+    let dir = math_iw4::angle_vectors(angles).0;
+    let end = std::array::from_fn(|i| eye[i] + dir[i] * GUNNER_RANGE);
+    let ignore = super::natives::engine::TraceIgnore {
+        client: Some(id),
+        ..super::turrets::ignore_self(world, heli)
+    };
+    let point = match super::natives::engine::entity_trace(
+        world,
+        eye,
+        end,
+        crate::bullet_collision::MASK_SHOT,
+        ignore,
+    ) {
+        crate::bullet_collision::TraceOutcome::Hit { end, .. } => end,
+        _ => end,
+    };
+    Some((point, held & playerstate_iw4::buttons::ATTACK != 0))
 }
 
 fn fire_weapon(world: &mut World, receiver: &Value, args: &[Value]) -> Result<Value, String> {
@@ -1042,7 +1073,7 @@ pub(crate) fn advance(world: &mut World) {
             .map_or((None, None), |heli| (heli.gunner, heli.weapon));
         let control = gunner
             .filter(|client| world.resource::<Runtime>().players.contains_key(client))
-            .and_then(|client| gunner_input(world, client));
+            .and_then(|client| gunner_input(world, id, client));
         let fire_ms = weapon
             .and_then(|weapon| crate::frame::FrameWorld::from_world(world).combat_facts_for(weapon))
             .map_or(100, |facts| facts.fire_time_ms.max(1));
@@ -1172,10 +1203,8 @@ pub(crate) fn advance(world: &mut World) {
         }
         let [pitch, yaw, roll] = angles;
         match control {
-            Some((view, attack)) => {
-                heli.turret = Some(TurretAim::Point(std::array::from_fn(|i| {
-                    next[i] + view[i] * GUNNER_RANGE
-                })));
+            Some((point, attack)) => {
+                heli.turret = Some(TurretAim::Point(point));
                 heli.on_target = true;
                 if attack && now >= heli.next_fire_ms {
                     heli.next_fire_ms = now + fire_ms;
