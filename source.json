@@ -18,6 +18,16 @@
       "category": "games",
       "versions": [
         {
+          "version": "0.4.0",
+          "buildVersion": "24",
+          "date": "2026-10-26T20:35:43Z",
+          "size": 39061205,
+          "downloadURL": "https://github.com/MarkusSela/IW4-Pocket/releases/download/v0.4.0/IW4.Pocket.ipa",
+          "localizedDescription": "TEST 0.4.0 — Experimental prerelease. Not verified on a phone. No confirmed fix for the memory crash. Experimental prerelease (TEST). Not verified on a phone. The stable release is still 0.3.9. Nothing below has been compiled or tried on a device before this build: it is the first CI build of this code. This build does not claim to fix the memory crash.",
+          "minOSVersion": "15.0",
+          "sha256": "a6c1d1ae67ee23b5197e48d34f506f65f5650cbf988351199293040ea8528e70"
+        },
+        {
           "version": "0.3.9",
           "buildVersion": "23",
           "date": "2026-10-22T22:49:58Z",
